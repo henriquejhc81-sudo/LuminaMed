@@ -30,10 +30,12 @@ st.markdown("""
 st.title("⚕️ Lumina Med")
 st.markdown("---")
 
+# 2. PUXANDO AS 4 CHAVES EXATAMENTE COMO NO SEU COFRE
 chaves_api = {
-    "openai": st.secrets.get("OPENAI_KEY", ""),
-    "gemini": st.secrets.get("GEMINI_KEY", ""),
-    "groq": st.secrets.get("GROQ_KEY", "")
+    "openai": st.secrets.get("OPENAI_API_KEY", ""),
+    "gemini": st.secrets.get("GEMINI_API_KEY", ""),
+    "groq": st.secrets.get("GROQ_API_KEY", ""),
+    "openrouter": st.secrets.get("OPENROUTER_API_KEY", "")
 }
 
 def limpar_consulta():
@@ -55,7 +57,7 @@ if submit_button:
     if not sintomas_input or idade_input is None or peso_input is None:
         st.error("⚠️ Preencha o quadro clínico, a idade e o peso do paciente.")
     else:
-        with st.spinner("🧠 Orquestrando junta médica (OpenAI, Gemini, Groq)..."):
+        with st.spinner("🧠 Orquestrando junta médica (OpenAI, Gemini, Groq, OpenRouter)..."):
             
             opinioes_individuais, veredito = diagnostico_autonomo_completo(sintomas_input, idade_input, peso_input, chaves_api)
             
