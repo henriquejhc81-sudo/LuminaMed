@@ -30,46 +30,62 @@ st.markdown("""
 st.title("⚕️ Lumina Med")
 st.markdown("---")
 
-# 2. CHAVES DE SEGURANÇA (O COFRE)
+# 2. CHAVES DE SEGURANÇA (O COFRE COMPLETO)
 chaves_api = {
     "openai": st.secrets.get("OPENAI_API_KEY", ""),
     "gemini": st.secrets.get("GEMINI_API_KEY", ""),
     "groq": st.secrets.get("GROQ_API_KEY", ""),
-    "openrouter": st.secrets.get("OPENROUTER_API_KEY", "")
+    "openrouter": st.secrets.get("OPENROUTER_API_KEY", ""),
+    "supabase_url": st.secrets.get("SUPABASE_URL", ""),
+    "supabase_key": st.secrets.get("SUPABASE_KEY", "")
 }
 
+# 3. NOVA ENGENHARIA DE LIMPEZA DE MEMÓRIA
 def limpar_consulta():
-    st.session_state.clear()
+    st.session_state['sintomas_chave'] = ""
+    st.session_state['idade_chave'] = None
+    st.session_state['peso_chave'] = None
 
+# Inicializa as variáveis na memória se for a primeira vez
+if 'sintomas_chave' not in st.session_state:
+    st.session_state['sintomas_chave'] = ""
+if 'idade_chave' not in st.session_state:
+    st.session_state['idade_chave'] = None
+if 'peso_chave' not in st.session_state:
+    st.session_state['peso_chave'] = None
+
+# 4. INTERFACE DO USUÁRIO
 with st.form("form_paciente"):
-    sintomas_input = st.text_area("Descreva o quadro clínico do paciente:", value="", placeholder="", key="sintomas_chave")
+    sintomas_input = st.text_area("Descreva o quadro clínico do paciente:", key="sintomas_chave")
     
     col1, col2 = st.columns(2)
     with col1:
-        idade_input = st.number_input("Idade (anos):", min_value=0, max_value=120, value=None, step=1, key="idade_chave")
+        idade_input = st.number_input("Idade (anos):", min_value=0, max_value=120, step=1, key="idade_chave")
     with col2:
-        peso_input = st.number_input("Peso (kg):", min_value=0.0, max_value=200.0, value=None, step=0.5, key="peso_chave")
+        peso_input = st.number_input("Peso (kg):", min_value=0.0, max_value=200.0, step=0.5, key="peso_chave")
         
     submit_button = st.form_submit_button("Gerar Prescrição Autônoma")
 
 if submit_button:
-    if not sintomas_input or idade_input is None or peso_input is None:
+    if not st.session_state['sintomas_chave'] or st.session_state['idade_chave'] is None or st.session_state['peso_chave'] is None:
         st.error("⚠️ Preencha o quadro clínico, a idade e o peso do paciente para prosseguir.")
     else:
         with st.spinner("🧠 A orquestrar a junta médica (Healer Engine, Auditoria e ANVISA)..."):
             
-            # A variável 'telemetria' guarda os dados dos bastidores e 'veredito' guarda a receita final
-            telemetria, veredito = diagnostico_autonomo_completo(sintomas_input, idade_input, peso_input, chaves_api)
+            telemetria, veredito = diagnostico_autonomo_completo(
+                st.session_state['sintomas_chave'], 
+                st.session_state['idade_chave'], 
+                st.session_state['peso_chave'], 
+                chaves_api
+            )
             
             if not telemetria:
-                # Se 'telemetria' vier vazia, significa que todas as IAs falharam em cadeia
                 st.error(veredito)
             else:
                 st.success("✅ Veredito Clínico finalizado, auditado e validado!")
-                
-                # Exibe o resultado do Juiz em destaque, incluindo o link da ANVISA
                 st.markdown("### 📋 Prontuário Unificado e Seguro")
                 st.info(veredito)
 
 st.markdown("---")
+# O botão agora chama a nossa função de limpeza forçada
 st.button("Nova Consulta", on_click=limpar_consulta)
