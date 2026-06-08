@@ -37,6 +37,12 @@ def buscar_tratamento(sintomas_lista, idade, peso, df_medicamentos):
             freq_horas = int(row.get('frequencia_horas', 8))
             limite_max = float(row.get('limite_maximo_diario_mg', 1000))
             
+            # Novas Variáveis de Apresentação
+            tipo_apresentacao = str(row.get('tipo_apresentacao', 'comprimido')).strip().lower()
+            concentracao = float(row.get('concentracao_mg_por_unidade', 1.0))
+            dose_final_mg = 0
+            
+            # Cálculo Base (Pediátrico ou Adulto)
             if idade < idade_adulta:
                 dose_mg_kg = float(row.get('dosagem_mg_kg', 0))
                 dose_diaria_total = dose_mg_kg * peso
@@ -45,11 +51,23 @@ def buscar_tratamento(sintomas_lista, idade, peso, df_medicamentos):
                     dose_diaria_total = limite_max
                 
                 doses_por_dia = 24 / freq_horas
-                dose_por_tomada = dose_diaria_total / doses_por_dia
-                tratamento['prescricao'] = f"Uso Pediátrico: Administrar {dose_por_tomada:.1f}mg a cada {freq_horas} horas."
+                dose_final_mg = dose_diaria_total / doses_por_dia
+                tratamento['prescricao'] = f"Uso Pediátrico: {dose_final_mg:.1f}mg a cada {freq_horas} horas."
             else:
-                dose_adulta = float(row.get('dose_adulta_mg', 0))
-                tratamento['prescricao'] = f"Uso Adulto: Administrar {dose_adulta}mg a cada {freq_horas} horas."
+                dose_final_mg = float(row.get('dose_adulta_mg', 0))
+                tratamento['prescricao'] = f"Uso Adulto: {dose_final_mg:.1f}mg a cada {freq_horas} horas."
+                
+            # Conversão para Gotas, ML ou Comprimidos
+            if concentracao > 0:
+                quantidade_unidade = dose_final_mg / concentracao
+                if tipo_apresentacao == 'gotas':
+                    tratamento['apresentacao_final'] = f"💧 Como administrar: Dar {int(quantidade_unidade)} gota(s)."
+                elif tipo_apresentacao in ['ml', 'xarope', 'suspensao']:
+                    tratamento['apresentacao_final'] = f"🥄 Como administrar: Dar {quantidade_unidade:.1f} ml."
+                else:
+                    tratamento['apresentacao_final'] = f"💊 Como administrar: Tomar {quantidade_unidade:.1f} unidade(s) (comprimido/cápsula)."
+            else:
+                tratamento['apresentacao_final'] = "Formato de administração não configurado."
                 
             resultados.append(tratamento)
     return resultados
