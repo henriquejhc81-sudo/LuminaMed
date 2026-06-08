@@ -1,6 +1,9 @@
-sintomas_chave,principio_ativo,idade_minima,idade_adulta,dosagem_mg_kg,dose_adulta_mg,frequencia_horas,limite_maximo_diario_mg,classe_farmacologica,avisos_alergia,similares
-febre dor,Paracetamol,0,12,15,500,6,4000,Analgésico e Antitérmico,Risco hepático em superdose.,Nenhum direto
-febre dor,Dipirona,0,15,15,500,6,4000,Analgésico e Antitérmico,Evitar em alérgicos a pirazolonas.,Nenhum direto
-inflamacao dor febre,Ibuprofeno,0.5,12,10,400,8,3200,AINEs (Ácido Propiônico),Risco de reações cruzadas com AAS.,Naproxeno; Cetoprofeno
-inflamacao dor,Tenoxicam,18,18,0,20,24,20,AINEs (Oxicams),Evitar outros AINEs pelo risco de reações cruzadas.,Meloxicam; Piroxicam
-infeccao bacteria,Amoxicilina,0,12,50,500,8,3000,Antibiótico (Penicilina),Evitar em alérgicos a penicilinas.,Ampicilina; Cefalexina
+sintomas_chave,principio_ativo,idade_minima,idade_adulta,dosagem_mg_kg,dose_adulta_mg,frequencia_horas,limite_maximo_diario_mg,classe_farmacologica,avisos_alergia,similares,tipo_apresentacao,concentracao_mg_por_unidade
+febre dor,Paracetamol (Gotas),0,12,15,500,6,4000,Analgésico e Antitérmico,Risco hepático.,Nenhum direto,gotas,10
+febre dor,Paracetamol (Comprimido),12,12,0,500,6,4000,Analgésico e Antitérmico,Risco hepático.,Nenhum direto,comprimido,500
+febre dor,Dipirona (Gotas),0,15,15,500,6,4000,Analgésico e Antitérmico,Evitar em alérgicos a pirazolonas.,Nenhum direto,gotas,25
+inflamacao dor febre,Ibuprofeno (Gotas 50mg/ml),0.5,12,10,400,8,3200,AINEs (Ácido Propiônico),Reações cruzadas com AAS.,Naproxeno,gotas,5
+inflamacao dor febre,Ibuprofeno (Comprimido),12,12,0,400,8,3200,AINEs (Ácido Propiônico),Reações cruzadas com AAS.,Naproxeno,comprimido,400
+inflamacao dor,Tenoxicam (Comprimido),18,18,0,20,24,20,AINEs (Oxicams),Evitar outros AINEs.,Meloxicam; Piroxicam,comprimido,20
+infeccao bacteria,Amoxicilina (Suspensão 250mg/5ml),0,12,50,500,8,3000,Antibiótico (Penicilina),Alérgicos a penicilinas.,Ampicilina,ml,50
+infeccao bacteria,Amoxicilina (Cápsula),12,12,0,500,8,3000,Antibiótico (Penicilina),Alérgicos a penicilinas.,Ampicilina,comprimido,500
