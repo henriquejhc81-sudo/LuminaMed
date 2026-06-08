@@ -45,7 +45,19 @@ if submit_button:
                     if pd.notna(opcao['similares']) and opcao['similares']:
                         st.warning(f"🔄 **Evitar Similares:** {opcao['similares']}")
 
-# Botão fora do formulário para resetar a tela rapidamente
-st.markdown("---")
-if st.button("🔄 Nova Consulta"):
+# Inicializa a memória se não existir
+if 'idade' not in st.session_state:
+    st.session_state.idade = 0
+if 'peso' not in st.session_state:
+    st.session_state.peso = 0.0
+if 'sintomas' not in st.session_state:
+    st.session_state.sintomas = ""
+
+def limpar_consulta():
+    st.session_state.idade = 0
+    st.session_state.peso = 0.0
+    st.session_state.sintomas = ""
+
+# O Botão agora aciona a função de limpeza antes de recarregar
+if st.button("🔄 Nova Consulta", on_click=limpar_consulta):
     st.rerun()
