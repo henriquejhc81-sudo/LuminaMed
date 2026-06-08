@@ -42,29 +42,43 @@ def consultar_llm(provedor, api_key, prompt):
             return res.json()['choices'][0]['message']['content']
             
     except Exception as e:
-        return f"Erro no provedor {provedor}: {str(e)}"
+        return f"Erro de comunicação com {provedor}: {str(e)}"
     return None
 
-def analisar_consenso(sintomas_usuario, chaves_api):
-    """O Agente Juiz que une as forças das IAs e extrai as palavras-chave clínicas"""
+def analisar_consenso_autonomo(sintomas_usuario, idade, peso, chaves_api):
+    """O DoctorBot atua de forma autônoma sem depender de banco de dados local"""
     
-    prompt_analise = f"""
-    Você é um extrator clínico de alta precisão. Analise os seguintes sintomas/frase do paciente: "{sintomas_usuario}"
+    prompt = f"""
+    Você atua como o 'DoctorBot', um sistema especialista de suporte clínico avançado.
     
-    Responda EXATAMENTE no formato JSON abaixo, sem textos antes ou depois:
-    {{
-        "sintomas_chave": "palavras_chave_separadas_por_espaco",
-        "analise_clinica_resumida": "Breve explicação humana do que os sintomas podem indicar"
-    }}
+    DADOS DO PACIENTE:
+    - Idade: {idade} anos
+    - Peso: {peso} kg
+    - Quadro relatado: "{sintomas_usuario}"
+    
+    Com base na medicina baseada em evidências e na farmacologia, forneça um prontuário rigoroso e estruturado contendo:
+    1. 🩺 **Hipóteses Clínicas Preliminares:** Possíveis causas dos sintomas.
+    2. 💊 **Princípios Ativos Indicados:** Sugestões de tratamento para alívio.
+    3. ⚖️ **Posologia Calculada:** Faça o cálculo matemático rigoroso da dose (em mg, ml ou gotas) baseado EXATAMENTE no peso ({peso}kg) e idade ({idade} anos) do paciente para cada medicação.
+    4. ⚠️ **Contraindicações:** Alertas e alergias cruzadas a serem evitadas.
+    
+    Use a formatação Markdown. Seja didático, objetivo e separe as seções claramente.
+    No final, adicione o seguinte aviso em negrito: "AVISO: Esta é uma análise gerada por Inteligência Artificial autônoma. Não substitui a consulta médica. Sempre valide a posologia com um profissional de saúde."
     """
     
     respostas = []
     
+    # Executa a chamada para as IAs disponíveis no cofre
     if chaves_api.get('openai'):
-        respostas.append(consultar_llm("openai", chaves_api['openai'], prompt_analise))
+        res = consultar_llm("openai", chaves_api['openai'], prompt)
+        if res: respostas.append(("OpenAI", res))
+        
     if chaves_api.get('gemini'):
-        respostas.append(consultar_llm("gemini", chaves_api['gemini'], prompt_analise))
+        res = consultar_llm("gemini", chaves_api['gemini'], prompt)
+        if res: respostas.append(("Gemini", res))
+        
     if chaves_api.get('groq'):
-        respostas.append(consultar_llm("groq", chaves_api['groq'], prompt_analise))
+        res = consultar_llm("groq", chaves_api['groq'], prompt)
+        if res: respostas.append(("Groq", res))
         
     return respostas
