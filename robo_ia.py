@@ -1,12 +1,21 @@
 import requests
-import streamlit as st
 
 def consultar_llm(provedor, api_key, prompt):
     """Faz chamadas diretas via API simulando requisições estruturadas limpas"""
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     
     try:
-        if provedor == "groq":
+        if provedor == "openai":
+            url = "https://api.openai.com/v1/chat/completions"
+            payload = {
+                "model": "gpt-3.5-turbo",
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.1
+            }
+            res = requests.post(url, json=payload, headers=headers, timeout=15)
+            return res.json()['choices'][0]['message']['content']
+            
+        elif provedor == "groq":
             url = "https://api.groq.com/openai/v1/chat/completions"
             payload = {
                 "model": "llama3-8b-8192",
@@ -17,7 +26,6 @@ def consultar_llm(provedor, api_key, prompt):
             return res.json()['choices'][0]['message']['content']
             
         elif provedor == "gemini":
-            # O Gemini usa a chave na própria URL
             url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
             payload = {"contents": [{"parts": [{"text": prompt}]}]}
             res = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=10)
@@ -52,12 +60,11 @@ def analisar_consenso(sintomas_usuario, chaves_api):
     
     respostas = []
     
-    # Consulta as IAs que estiverem configuradas
+    if chaves_api.get('openai'):
+        respostas.append(consultar_llm("openai", chaves_api['openai'], prompt_analise))
     if chaves_api.get('gemini'):
         respostas.append(consultar_llm("gemini", chaves_api['gemini'], prompt_analise))
     if chaves_api.get('groq'):
         respostas.append(consultar_llm("groq", chaves_api['groq'], prompt_analise))
         
-    # Aqui faremos a IA Juiz ler as respostas e consolidar o resultado final puro
-    # Para o MVP, se a IA falhar ou estiver sem chave, usamos o processamento local clássico.
     return respostas
