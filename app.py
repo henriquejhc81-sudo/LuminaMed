@@ -115,7 +115,7 @@ if submit_button:
                 st.markdown("### 📋 Prontuário Unificado e Seguro")
                 st.info(veredito)
                 
-                # 6. SALVAMENTO AUTOMÁTICO NO BANCO DE DADOS
+ # 6. SALVAMENTO AUTOMÁTICO NO BANCO DE DADOS
                 if supabase:
                     try:
                         novo_registro = {
@@ -127,7 +127,5 @@ if submit_button:
                         }
                         supabase.table("historico_consultas").insert(novo_registro).execute()
                     except Exception as e:
-                        st.toast("Não foi possível salvar o histórico. Verifique a tabela no Supabase.")
-
-st.markdown("---")
-st.button("Nova Consulta", on_click=limpar_consulta)
+                        # O silenciador foi removido. Agora veremos o erro exato do banco!
+                        st.error(f"🚨 Erro exato do Supabase: {str(e)}")
