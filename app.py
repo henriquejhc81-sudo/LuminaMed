@@ -20,7 +20,7 @@ st.markdown("""
         color: #0e1117;
         box-shadow: 0 0 15px #00ff99;
     }
-    /* Limpeza das bordas dos inputs */
+    /* Limpeza das bordas das caixas de texto */
     .stTextInput textarea, .stNumberInput input {
         border-radius: 4px !important;
     }
@@ -30,7 +30,7 @@ st.markdown("""
 st.title("⚕️ Lumina Med")
 st.markdown("---")
 
-# 2. PUXANDO AS 4 CHAVES EXATAMENTE COMO NO SEU COFRE
+# 2. CHAVES DE SEGURANÇA (O COFRE)
 chaves_api = {
     "openai": st.secrets.get("OPENAI_API_KEY", ""),
     "gemini": st.secrets.get("GEMINI_API_KEY", ""),
@@ -42,8 +42,7 @@ def limpar_consulta():
     st.session_state.clear()
 
 with st.form("form_paciente"):
-    # Label direto, sem placeholder e sem títulos poluindo a tela
-    sintomas_input = st.text_area("Descreva o quadro do paciente:", value="", placeholder="", key="sintomas_chave")
+    sintomas_input = st.text_area("Descreva o quadro clínico do paciente:", value="", placeholder="", key="sintomas_chave")
     
     col1, col2 = st.columns(2)
     with col1:
@@ -55,26 +54,22 @@ with st.form("form_paciente"):
 
 if submit_button:
     if not sintomas_input or idade_input is None or peso_input is None:
-        st.error("⚠️ Preencha o quadro clínico, a idade e o peso do paciente.")
+        st.error("⚠️ Preencha o quadro clínico, a idade e o peso do paciente para prosseguir.")
     else:
-        with st.spinner("🧠 Orquestrando junta médica (OpenAI, Gemini, Groq, OpenRouter)..."):
+        with st.spinner("🧠 A orquestrar a junta médica (Healer Engine, Auditoria e ANVISA)..."):
             
-            opinioes_individuais, veredito = diagnostico_autonomo_completo(sintomas_input, idade_input, peso_input, chaves_api)
+            # A variável 'telemetria' guarda os dados dos bastidores e 'veredito' guarda a receita final
+            telemetria, veredito = diagnostico_autonomo_completo(sintomas_input, idade_input, peso_input, chaves_api)
             
-            if not opinioes_individuais:
-                st.error("Falha de comunicação com as IAs. Verifique suas chaves no painel Secrets.")
+            if not telemetria:
+                # Se 'telemetria' vier vazia, significa que todas as IAs falharam em cadeia
+                st.error(veredito)
             else:
-                st.success("✅ Veredito Clínico finalizado.")
+                st.success("✅ Veredito Clínico finalizado, auditado e validado!")
                 
-                # Exibe o resultado do Juiz em destaque
-                st.markdown("### 📋 Prontuário Unificado (Veredito do Juiz)")
+                # Exibe o resultado do Juiz em destaque, incluindo o link da ANVISA
+                st.markdown("### 📋 Prontuário Unificado e Seguro")
                 st.info(veredito)
-                
-                st.markdown("---")
-                st.markdown("#### 🔍 Pareceres Individuais (Bastidores)")
-                for provedor, texto in opinioes_individuais.items():
-                    with st.expander(f"Parecer Base: {provedor}"):
-                        st.write(texto)
 
 st.markdown("---")
 st.button("Nova Consulta", on_click=limpar_consulta)
