@@ -1,46 +1,58 @@
 import json
 
-# BASE DE DADOS ESTRUTURADA (O CÉREBRO)
-AINEs = {
-    "Ácido Salicílico": ["Aspirina (AAS)"],
-    "Ácido Propiônico": ["Ibuprofeno", "Naproxeno", "Cetoprofeno"],
-    "Ácido Acético": ["Diclofenaco Sódico", "Diclofenaco Potássico", "Cetorolaco"],
-    "Oxicam": ["Piroxicam", "Tenoxicam", "Meloxicam"],
-    "Fenamatos": ["Ácido Mefenâmico"],
-    "Coxibes": ["Celecoxibe", "Etoricoxibe"]
-}
+# BASE DE CONHECIMENTO CIENTÍFICO INTEGRADA
+# (Esta base é a "Constituição" do Lumina Med)
 
 CORTICOIDES = {
-    "Cortisona": {"potencia": 0.8, "duracao": "Curta", "dose_eq": 25, "retencao": "Alta"},
-    "Hidrocortisona": {"potencia": 1.0, "duracao": "Curta", "dose_eq": 20, "retencao": "Alta"},
-    "Prednisona": {"potencia": 4.5, "duracao": "Intermediária", "dose_eq": 5, "retencao": "Baixa"},
-    "Prednisolona": {"potencia": 4.5, "duracao": "Intermediária", "dose_eq": 5, "retencao": "Baixa"},
-    "Metilprednisolona": {"potencia": 6.0, "duracao": "Intermediária", "dose_eq": 4, "retencao": "Nula"},
-    "Dexametasona": {"potencia": 27.5, "duracao": "Longa", "dose_eq": 0.75, "retencao": "Nula"},
-    "Betametasona": {"potencia": 27.5, "duracao": "Longa", "dose_eq": 0.6, "retencao": "Nula"}
+    "Hidrocortisona": {"potencia": 1, "dose_eq": 20, "retencao": "Alta"},
+    "Cortisona": {"potencia": 0.8, "dose_eq": 25, "retencao": "Alta"},
+    "Prednisona": {"potencia": 4, "dose_eq": 5, "retencao": "Baixa"},
+    "Prednisolona": {"potencia": 4, "dose_eq": 5, "retencao": "Baixa"},
+    "Metilprednisolona": {"potencia": 5, "dose_eq": 4, "retencao": "Nula"},
+    "Triancinolona": {"potencia": 5, "dose_eq": 4, "retencao": "Nula"},
+    "Dexametasona": {"potencia": 30, "dose_eq": 0.75, "retencao": "Nula"},
+    "Betametasona": {"potencia": 30, "dose_eq": 0.6, "retencao": "Nula"}
 }
 
-def listar_opcoes_tratamento(sintomas, alergias, chaves_api):
-    # Prompt focado em usar nossas classes reais
-    prompt = f"""
-    Sintomas: {sintomas}. Alergias: {alergias}.
-    Com base nestas categorias de medicamentos: {list(AINEs.keys())} e estas de Corticoides: {list(CORTICOIDES.keys())},
-    selecione 4 opções de princípios ativos altamente eficazes para esse quadro.
-    Responda apenas em JSON: {{"opcoes": ["Principio1", "Principio2", "Principio3", "Principio4"]}}
-    """
-    # ... (restante da lógica de chamada de API igual à anterior)
-    
+AINEs = {
+    "Salicilatos": ["Aspirina (AAS)"],
+    "Propiônicos": ["Ibuprofeno", "Naproxeno", "Cetoprofeno", "Flurbiprofeno"],
+    "Acéticos": ["Diclofenaco Sódico", "Diclofenaco Potássico", "Cetorolaco", "Aceclofenaco"],
+    "Oxicans": ["Piroxicam", "Tenoxicam", "Meloxicam", "Lornoxicam"],
+    "Fenamatos": ["Ácido Mefenâmico", "Nimesulida"],
+    "Coxibes": ["Celecoxibe", "Etoricoxibe", "Parecoxibe"]
+}
+
+def consultar_llm_com_healer(prompt, chaves_api):
+    # ... (Manter a mesma função de consulta que já criamos, ela continua funcional)
+    pass 
+
 def gerar_prontuario_final(principio, sintomas, idade, peso, alergias, chaves_api):
-    # Se o principio escolhido for um corticoide, injetamos nossa tabela na análise
-    info_adicional = ""
+    """Motor de Prescrição com Validação Cruzada de Base de Dados"""
+    
+    # 1. Validação de Segurança (A IA é forçada a consultar nossa tabela)
+    contexto_tecnico = ""
     if principio in CORTICOIDES:
         dados = CORTICOIDES[principio]
-        info_adicional = f"\nDETALHES TÉCNICOS: Potência Relativa {dados['potencia']}x | Dose Equivalente: {dados['dose_eq']}mg | Retenção Salina: {dados['retencao']}."
+        contexto_tecnico = f"NORMA TÉCNICA CORTICOIDE: Potência {dados['potencia']}x, Dose Equivalente Base {dados['dose_eq']}mg. Retenção: {dados['retencao']}."
+    elif any(principio in lista for lista in AINEs.values()):
+        contexto_tecnico = "NORMA TÉCNICA AINE: O uso deve considerar proteção gástrica e função renal."
 
     prompt = f"""
-    Prescrição: {principio}. 
-    Paciente: {idade} anos, {peso}kg. 
-    {info_adicional}
-    Gere a prescrição médica detalhada, incluindo posologia para o peso e contraindicações.
+    Como Farmacêutico Clínico, gere a prescrição para: {principio}.
+    Paciente: {idade} anos, {peso}kg. Sintomas: {sintomas}. Alergias: {alergias}.
+    
+    {contexto_tecnico}
+    
+    REGRA OBRIGATÓRIA: Calcule a dosagem exata baseada no peso do paciente ({peso}kg) e na potência técnica informada.
+    NÃO gere prescrição se houver contraindicação com as alergias informadas.
+    
+    Estrutura:
+    - Princípio Ativo e Classe
+    - Indicação Clínica
+    - Posologia Matemática Exata (mg/kg/dia)
+    - Alerta de Segurança (Alergias/Alternativas)
     """
-    # ... (chamada de IA)
+    
+    # ... (resto da lógica de auditoria e retorno ANVISA)
+    return prontuario_auditado, link_bula
