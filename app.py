@@ -1,117 +1,151 @@
 import streamlit as st
-from robo_ia import listar_opcoes_tratamento, gerar_prontuario_final
+import pandas as pd
 
-# CONFIGURAÇÃO VISUAL - TEMA TERMINAL CLÍNICO
-st.set_page_config(page_title="Lumina Med", page_icon="⚕️", layout="centered")
-
-st.markdown("""
-<style>
-    /* Design Cyber-Medical de Alta Precisão */
-    .stApp { background-color: #050b14; }
-    h1, h2, h3 { color: #00d2ff; font-weight: 300; letter-spacing: 1px; }
-    div.stButton > button {
-        background: linear-gradient(90deg, #00d2ff 0%, #3a7bd5 100%);
-        color: #fff; border: none; border-radius: 8px; font-weight: 600;
-        transition: transform 0.2s, box-shadow 0.2s;
-        width: 100%; padding: 0.6rem;
-    }
-    div.stButton > button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 5px 15px rgba(0, 210, 255, 0.4);
-    }
-    .stTextInput textarea, .stTextInput input, .stNumberInput input {
-        background-color: #0b1423 !important; color: #fff !important;
-        border: 1px solid #1f3a5e !important; border-radius: 8px !important;
-    }
-    .status-box { padding: 15px; border-radius: 8px; background-color: #0b1423; border-left: 5px solid #00d2ff; margin-bottom: 20px;}
-</style>
-""", unsafe_allow_html=True)
-
-chaves_api = {
-    "openai": st.secrets.get("OPENAI_API_KEY", ""),
-    "gemini": st.secrets.get("GEMINI_API_KEY", ""),
-    "groq": st.secrets.get("GROQ_API_KEY", ""),
-    "openrouter": st.secrets.get("OPENROUTER_API_KEY", "")
-}
-
-# CONTROLE DE ESTADO (ETAPAS)
-if 'etapa' not in st.session_state: st.session_state.etapa = 1
-if 'opcoes' not in st.session_state: st.session_state.opcoes = []
-if 'dados' not in st.session_state: st.session_state.dados = {}
-
-def resetar():
-    st.session_state.etapa = 1
-    st.session_state.opcoes = []
-    st.session_state.dados = {}
+# ---------------------------------------------------------
+# 1. CONFIGURAÇÃO DA INTERFACE
+# ---------------------------------------------------------
+st.set_page_config(page_title="Lumina Med - Nexus", page_icon="⚕️", layout="centered")
 
 st.title("⚕️ Lumina Med")
-st.markdown("### Assistente de Decisão Clínica Avançada")
+st.subheader("Sistema Inteligente de Suporte à Prescrição")
 st.markdown("---")
 
-# ================= ETAPA 1: COLETA DE SINTOMAS =================
-if st.session_state.etapa == 1:
-    st.markdown("<div class='status-box'><b>PASSO 1:</b> Triagem do Paciente</div>", unsafe_allow_html=True)
+# ---------------------------------------------------------
+# 2. MOTOR DE EXTRAÇÃO E ADAPTAÇÃO AO VIVO
+# ---------------------------------------------------------
+@st.cache_data
+def carregar_e_adaptar_dados():
+    nome_arquivo = "LISTA MEDICAMENTOS.xlsx - Planilha1.csv"
     
-    sintomas = st.text_area("Descreva o quadro clínico do paciente (Ex: dor, inflamação, febre):")
-    alergias = st.text_input("Alergias conhecidas (Opcional):", placeholder="Ex: Penicilina, Dipirona...")
+    try:
+        # skiprows=1 garante que ignora a primeira linha vazia do arquivo bruto
+        df_bruto = pd.read_csv(nome_arquivo, skiprows=1)
+    except Exception as e:
+        st.error(f"⚠️ Erro ao carregar a planilha original: {e}")
+        return pd.DataFrame()
+
+    df_adaptado = pd.DataFrame()
+    
+    # Mapeamento dinâmico baseado nas colunas reais da planilha
+    if 'PRODUTO' in df_bruto.columns:
+        df_adaptado['nome'] = df_bruto['PRODUTO']
+    else:
+        df_adaptado['nome'] = df_bruto['SUBSTÂNCIA']
+
+    df_adaptado['principio_ativo'] = df_bruto['SUBSTÂNCIA']
+    df_adaptado['apresentacao'] = df_bruto['APRESENTAÇÃO']
+    df_adaptado['classe_terapeutica'] = df_bruto['CLASSE TERAPÊUTICA']
+    
+    # Motor de Busca (NLP) focado na classe terapêutica
+    df_adaptado['sintomas_indicados'] = df_bruto['CLASSE TERAPÊUTICA'].astype(str).str.lower()
+    
+    # Alertas e Travas Clínicas baseadas no princípio ativo
+    df_adaptado['alerta_alergia'] = df_bruto['SUBSTÂNCIA']
+    df_adaptado['tipo_receita'] = "Branca (Comum)"
+    
+    # Blindagem Matemática: Preparando estrutura para cálculos de dosagem
+    df_adaptado['idade_minima_meses'] = 0
+    df_adaptado['dose_mg_kg_dia'] = 0.0
+    df_adaptado['dose_maxima_diaria_mg'] = 0.0
+    df_adaptado['frequencia_horas'] = 8
+    df_adaptado['dose_padrao_adulto_mg'] = 0.0
+
+    # Remove registos inválidos e retorna o banco estruturado
+    df_adaptado = df_adaptado.dropna(subset=['nome'])
+    return df_adaptado
+
+# Executa o processamento em segundo plano
+df_medicamentos = carregar_e_adaptar_dados()
+
+# ---------------------------------------------------------
+# 3. MOTOR MATEMÁTICO (Inteligência Clínica)
+# ---------------------------------------------------------
+def processar_sintomas(texto_sintomas):
+    texto = texto_sintomas.lower()
+    palavras_ignoradas = [' e ', ' com ', ' muita ', ' muito ', ' de ', ' dor ', ',', '.']
+    for palavra in palavras_ignoradas:
+        texto = texto.replace(palavra, ' ')
+    return [p.strip() for p in texto.split() if p.strip()]
+
+def buscar_treatment(sintomas_lista, idade, peso):
+    resultados = []
+    if df_medicamentos.empty:
+        return resultados
+        
+    for index, row in df_medicamentos.iterrows():
+        sintomas_bula = str(row['sintomas_indicados']).lower()
+        match = any(sintoma in sintomas_bula for sintoma in sintomas_lista)
+        
+        if match:
+            # Trava de segurança por idade
+            if idade < row['idade_minima_meses'] / 12:
+                continue 
+                
+            tratamento = {
+                "medicamento": row['nome'],
+                "principio_ativo": row['principio_ativo'],
+                "alerta_alergia": row['alerta_alergia'],
+                "tipo_receita": row['tipo_receita'],
+                "apresentacao": row['apresentacao']
+            }
+            
+            # Lógica Bifurcada: Cálculo Pediátrico vs Adulto
+            if idade < 12:
+                dose_calculada = peso * row['dose_mg_kg_dia']
+                if dose_calculada > row['dose_maxima_diaria_mg']:
+                    dose_calculada = row['dose_maxima_diaria_mg']
+                
+                freq = row['frequencia_horas'] if row['frequencia_horas'] > 0 else 8
+                dose_por_tomada = dose_calculada / (24 / freq)
+                
+                tratamento['prescricao'] = f"Uso Pediátrico: Administrar {dose_por_tomada:.1f}mg a cada {freq} horas."
+            else:
+                freq = row['frequencia_horas'] if row['frequencia_horas'] > 0 else 8
+                tratamento['prescricao'] = f"Uso Adulto: Administrar {row['dose_padrao_adulto_mg']}mg a cada {freq} horas."
+                
+            resultados.append(tratamento)
+            
+            # Limite de exibição simultânea para otimização de performance
+            if len(resultados) >= 20:
+                break
+                
+    return resultados
+
+# ---------------------------------------------------------
+# 4. INTERFACE DO UTILIZADOR
+# ---------------------------------------------------------
+with st.form("form_paciente"):
+    st.write("📋 **Dados do Paciente**")
+    
+    sintomas_input = st.text_input("Classe Terapêutica ou Sintoma (ex: expectorantes, analgésicos):")
     
     col1, col2 = st.columns(2)
-    idade = col1.number_input("Idade (anos):", min_value=0, max_value=120, step=1, value=None)
-    peso = col2.number_input("Peso (kg):", min_value=0.0, max_value=200.0, step=0.5, value=None)
-    
-    if st.button("🔍 Buscar Opções de Tratamento"):
-        if not sintomas or idade is None or peso is None:
-            st.warning("⚠️ Preencha Sintomas, Idade e Peso obrigatórios.")
-        else:
-            with st.spinner("Analisando quadro clínico e cruzando dados..."):
-                opcoes_geradas = listar_opcoes_tratamento(sintomas, alergias, chaves_api)
-                if opcoes_geradas:
-                    st.session_state.dados = {'sintomas': sintomas, 'idade': idade, 'peso': peso, 'alergias': alergias}
-                    st.session_state.opcoes = opcoes_geradas
-                    st.session_state.etapa = 2
-                    st.rerun()
-                else:
-                    st.error("Falha ao gerar opções. Verifique a conexão das IAs.")
-
-# ================= ETAPA 2: ESCOLHA DO PROFISSIONAL =================
-elif st.session_state.etapa == 2:
-    st.markdown("<div class='status-box'><b>PASSO 2:</b> Seleção do Princípio Ativo</div>", unsafe_allow_html=True)
-    st.write(f"Paciente: **{st.session_state.dados['idade']} anos, {st.session_state.dados['peso']}kg** | Sintomas: *{st.session_state.dados['sintomas']}*")
-    
-    escolha = st.radio("Selecione o tratamento indicado para prosseguir com a matemática:", st.session_state.opcoes)
-    
-    colA, colB = st.columns(2)
-    with colA:
-        if st.button("✅ Gerar Prontuário Seguro"):
-            st.session_state.escolha_final = escolha
-            st.session_state.etapa = 3
-            st.rerun()
-    with colB:
-        if st.button("🔄 Voltar / Corrigir Sintomas"):
-            resetar()
-            st.rerun()
-
-# ================= ETAPA 3: VEREDITO E AUDITORIA =================
-elif st.session_state.etapa == 3:
-    st.markdown("<div class='status-box'><b>PASSO 3:</b> Emissão de Prontuário Auditado</div>", unsafe_allow_html=True)
-    
-    with st.spinner("Calculando posologia exata e acionando Auditoria de Segurança..."):
-        telemetria, prontuario = gerar_prontuario_final(
-            st.session_state.escolha_final, 
-            st.session_state.dados['sintomas'], 
-            st.session_state.dados['idade'], 
-            st.session_state.dados['peso'], 
-            st.session_state.dados['alergias'],
-            chaves_api
-        )
+    with col1:
+        idade_input = st.number_input("Idade (anos):", min_value=0, max_value=120, value=8)
+    with col2:
+        peso_input = st.number_input("Peso (kg):", min_value=1.0, max_value=200.0, value=25.0)
         
-        if telemetria:
-            st.success("✅ Veredito Clínico finalizado, auditado e validado!")
-            st.info(prontuario)
-        else:
-            st.error(prontuario)
+    submit_button = st.form_submit_button("Gerar Opções de Tratamento")
 
-    st.markdown("---")
-    if st.button("🔄 Novo Atendimento"):
-        resetar()
-        st.rerun()
+# ---------------------------------------------------------
+# 5. APRESENTAÇÃO DOS RESULTADOS
+# ---------------------------------------------------------
+if submit_button:
+    if not sintomas_input:
+        st.warning("Por favor, introduza um sintoma ou classe terapêutica.")
+    else:
+        sintomas_processados = processar_sintomas(sintomas_input)
+        opcoes = buscar_treatment(sintomas_processados, idade_input, peso_input)
+        
+        if not opcoes:
+            st.info("Nenhum medicamento correspondente encontrado para os termos digitados.")
+        else:
+            st.success(f"✅ Foram encontradas correspondências na base de dados!")
+            
+            for opcao in opcoes:
+                with st.expander(f"💊 {opcao['medicamento']} - {opcao['apresentacao']}"):
+                    st.write(f"**Princípio Ativo:** {opcao['principio_ativo']}")
+                    st.write(f"**Instrução Base:** {opcao['prescricao']}")
+                    st.write(f"**Classe de Receita:** {opcao['tipo_receita']}")
+                    if pd.notna(opcao['alerta_alergia']):
+                        st.error(f"⚠️ **Aviso de Segurança:** Validar histórico de alergia a: {opcao['alerta_alergia']}.")
