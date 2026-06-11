@@ -16,39 +16,34 @@ st.markdown("---")
 # ---------------------------------------------------------
 @st.cache_data
 def carregar_e_adaptar_dados():
-    nome_padrao = "LISTA MEDICAMENTOS.xlsx - Planilha1.csv"
-    nome_arquivo = nome_padrao
+    # Agora buscamos pelo padrão limpo
+    nome_arquivo = "lista_medicamentos.csv"
     
-    # Se o arquivo com o nome exato não for achado, o Nexus caça o arquivo correto
+    # Se o arquivo não existir, o sistema avisa de forma elegante
     if not os.path.exists(nome_arquivo):
-        arquivos_no_github = os.listdir('.')
-        # Procura qualquer arquivo .csv que mencione "MEDICAMENTOS" ou "LISTA"
-        csv_encontrados = [f for f in arquivos_no_github if ('MEDICAMENTOS' in f.upper() or 'LISTA' in f.upper()) and f.endswith('.csv')]
-        
-        if csv_encontrados:
-            nome_arquivo = csv_encontrados[0]
-        else:
-            # Se não achar nada com o nome, pega o primeiro .csv que estiver na pasta
-            csv_gerais = [f for f in arquivos_no_github if f.endswith('.csv')]
-            if csv_gerais:
-                nome_arquivo = csv_gerais[0]
-            else:
-                st.error("⚠️ Nenhum arquivo CSV de medicamentos foi encontrado no seu repositório GitHub!")
-                return pd.DataFrame()
-
-    try:
-        # Lê o arquivo detectado. Tenta identificar se o cabeçalho está na linha 1 ou 2
-        df_bruto = pd.read_csv(nome_arquivo)
-        if 'SUBSTÂNCIA' not in df_bruto.columns and len(df_bruto) > 0:
-            # Tenta reler pulando a primeira linha caso haja lixo de exportação do Excel
-            df_bruto = pd.read_csv(nome_arquivo, skiprows=1)
-            
-        st.info(f"📦 Banco de dados carregado com sucesso a partir de: `{nome_arquivo}`")
-    except Exception as e:
-        st.error(f"⚠️ Erro crítico ao ler a planilha: {e}")
+        st.error(f"⚠️ Arquivo '{nome_arquivo}' não encontrado. Verifique se o nome está em letras minúsculas!")
         return pd.DataFrame()
 
+    try:
+        # Lê o arquivo. Usamos header=0 pois agora ele está limpo
+        df_bruto = pd.read_csv(nome_arquivo)
+        st.info("📦 Banco de dados carregado com sucesso.")
+    except Exception as e:
+        st.error(f"⚠️ Erro ao processar o arquivo: {e}")
+        return pd.DataFrame()
+
+    # Mapeamento fixo, já que o arquivo está padronizado
     df_adaptado = pd.DataFrame()
+    df_adaptado['nome'] = df_bruto['PRODUTO']
+    df_adaptado['principio_ativo'] = df_bruto['SUBSTÂNCIA']
+    df_adaptado['apresentacao'] = df_bruto['APRESENTAÇÃO']
+    df_adaptado['classe_terapeutica'] = df_bruto['CLASSE TERAPÊUTICA']
+    
+    # Restante da lógica...
+    df_adaptado['sintomas_indicados'] = df_adaptado['classe_terapeutica'].astype(str).str.lower()
+    df_adaptado['alerta_alergia'] = df_adaptado['principio_ativo']
+    # ... (restante do código)
+    return df_adaptado
     
     # Padronização de Colunas (Garantindo nomes corretos independente do padrão)
     colunas_reais = df_bruto.columns
