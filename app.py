@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import os
 
 # ---------------------------------------------------------
 # 1. CONFIGURAÇÃO DA INTERFACE
@@ -11,50 +12,78 @@ st.subheader("Sistema Inteligente de Suporte à Prescrição")
 st.markdown("---")
 
 # ---------------------------------------------------------
-# 2. MOTOR DE EXTRAÇÃO E ADAPTAÇÃO AO VIVO
+# 2. MOTOR DE DETECÇÃO E CARREGAMENTO RESILIENTE
 # ---------------------------------------------------------
 @st.cache_data
 def carregar_e_adaptar_dados():
-    nome_arquivo = "LISTA MEDICAMENTOS.xlsx - Planilha1.csv"
+    nome_padrao = "LISTA MEDICAMENTOS.xlsx - Planilha1.csv"
+    nome_arquivo = nome_padrao
     
+    # Se o arquivo com o nome exato não for achado, o Nexus caça o arquivo correto
+    if not os.path.exists(nome_arquivo):
+        arquivos_no_github = os.listdir('.')
+        # Procura qualquer arquivo .csv que mencione "MEDICAMENTOS" ou "LISTA"
+        csv_encontrados = [f for f in arquivos_no_github if ('MEDICAMENTOS' in f.upper() or 'LISTA' in f.upper()) and f.endswith('.csv')]
+        
+        if csv_encontrados:
+            nome_arquivo = csv_encontrados[0]
+        else:
+            # Se não achar nada com o nome, pega o primeiro .csv que estiver na pasta
+            csv_gerais = [f for f in arquivos_no_github if f.endswith('.csv')]
+            if csv_gerais:
+                nome_arquivo = csv_gerais[0]
+            else:
+                st.error("⚠️ Nenhum arquivo CSV de medicamentos foi encontrado no seu repositório GitHub!")
+                return pd.DataFrame()
+
     try:
-        # skiprows=1 garante que ignora a primeira linha vazia do arquivo bruto
-        df_bruto = pd.read_csv(nome_arquivo, skiprows=1)
+        # Lê o arquivo detectado. Tenta identificar se o cabeçalho está na linha 1 ou 2
+        df_bruto = pd.read_csv(nome_arquivo)
+        if 'SUBSTÂNCIA' not in df_bruto.columns and len(df_bruto) > 0:
+            # Tenta reler pulando a primeira linha caso haja lixo de exportação do Excel
+            df_bruto = pd.read_csv(nome_arquivo, skiprows=1)
+            
+        st.info(f"📦 Banco de dados carregado com sucesso a partir de: `{nome_arquivo}`")
     except Exception as e:
-        st.error(f"⚠️ Erro ao carregar a planilha original: {e}")
+        st.error(f"⚠️ Erro crítico ao ler a planilha: {e}")
         return pd.DataFrame()
 
     df_adaptado = pd.DataFrame()
     
-    # Mapeamento dinâmico baseado nas colunas reais da planilha
-    if 'PRODUTO' in df_bruto.columns:
-        df_adaptado['nome'] = df_bruto['PRODUTO']
-    else:
-        df_adaptado['nome'] = df_bruto['SUBSTÂNCIA']
+    # Padronização de Colunas (Garantindo nomes corretos independente do padrão)
+    colunas_reais = df_bruto.columns
+    substancia_col = [c for c in colunas_reais if 'SUBST' in c.upper()]
+    apresentacao_col = [c for c in colunas_reais if 'APRES' in c.upper()]
+    classe_col = [c for c in colunas_reais if 'CLASS' in c.upper()]
+    produto_col = [c for c in colunas_reais if 'PROD' in c.upper()]
 
-    df_adaptado['principio_ativo'] = df_bruto['SUBSTÂNCIA']
-    df_adaptado['apresentacao'] = df_bruto['APRESENTAÇÃO']
-    df_adaptado['classe_terapeutica'] = df_bruto['CLASSE TERAPÊUTICA']
+    if not substancia_col:
+        st.error("⚠️ A coluna 'SUBSTÂNCIA' não foi detectada no arquivo enviado.")
+        return pd.DataFrame()
+
+    # Mapeamento dinâmico
+    df_adaptado['nome'] = df_bruto[produto_col[0]] if produto_col else df_bruto[substancia_col[0]]
+    df_adaptado['principio_ativo'] = df_bruto[substancia_col[0]]
+    df_adaptado['apresentacao'] = df_bruto[apresentacao_col[0]] if apresentacao_col else "Não informada"
+    df_adaptado['classe_terapeutica'] = df_bruto[classe_col[0]] if classe_col else "Geral"
     
     # Motor de Busca (NLP) focado na classe terapêutica
-    df_adaptado['sintomas_indicados'] = df_bruto['CLASSE TERAPÊUTICA'].astype(str).str.lower()
+    df_adaptado['sintomas_indicados'] = df_adaptado['classe_terapeutica'].astype(str).str.lower()
     
     # Alertas e Travas Clínicas baseadas no princípio ativo
-    df_adaptado['alerta_alergia'] = df_bruto['SUBSTÂNCIA']
+    df_adaptado['alerta_alergia'] = df_adaptado['principio_ativo']
     df_adaptado['tipo_receita'] = "Branca (Comum)"
     
-    # Blindagem Matemática: Preparando estrutura para cálculos de dosagem
+    # Estrutura Matemática Preparada (V1 a V4)
     df_adaptado['idade_minima_meses'] = 0
     df_adaptado['dose_mg_kg_dia'] = 0.0
     df_adaptado['dose_maxima_diaria_mg'] = 0.0
     df_adaptado['frequencia_horas'] = 8
     df_adaptado['dose_padrao_adulto_mg'] = 0.0
 
-    # Remove registos inválidos e retorna o banco estruturado
-    df_adaptado = df_adaptado.dropna(subset=['nome'])
-    return df_adaptado
+    return df_adaptado.dropna(subset=['nome'])
 
-# Executa o processamento em segundo plano
+# Executa o processamento em tempo de execução
 df_medicamentos = carregar_e_adaptar_dados()
 
 # ---------------------------------------------------------
@@ -77,7 +106,6 @@ def buscar_treatment(sintomas_lista, idade, peso):
         match = any(sintoma in sintomas_bula for sintoma in sintomas_lista)
         
         if match:
-            # Trava de segurança por idade
             if idade < row['idade_minima_meses'] / 12:
                 continue 
                 
@@ -89,7 +117,6 @@ def buscar_treatment(sintomas_lista, idade, peso):
                 "apresentacao": row['apresentacao']
             }
             
-            # Lógica Bifurcada: Cálculo Pediátrico vs Adulto
             if idade < 12:
                 dose_calculada = peso * row['dose_mg_kg_dia']
                 if dose_calculada > row['dose_maxima_diaria_mg']:
@@ -105,7 +132,7 @@ def buscar_treatment(sintomas_lista, idade, peso):
                 
             resultados.append(tratamento)
             
-            # Limite de exibição simultânea para otimização de performance
+            # Limite preventivo para o painel não travar com milhares de resultados
             if len(resultados) >= 20:
                 break
                 
@@ -117,7 +144,7 @@ def buscar_treatment(sintomas_lista, idade, peso):
 with st.form("form_paciente"):
     st.write("📋 **Dados do Paciente**")
     
-    sintomas_input = st.text_input("Classe Terapêutica ou Sintoma (ex: expectorantes, analgésicos):")
+    sintomas_input = st.text_input("Classe Terapêutica ou Termo da Bula (ex: expectorantes, analgésicos, corticosteróides):")
     
     col1, col2 = st.columns(2)
     with col1:
@@ -132,16 +159,13 @@ with st.form("form_paciente"):
 # ---------------------------------------------------------
 if submit_button:
     if not sintomas_input:
-        st.warning("Por favor, introduza um sintoma ou classe terapêutica.")
+        st.warning("Por favor, introduza um termo de busca.")
     else:
         sintomas_processados = processar_sintomas(sintomas_input)
         opcoes = buscar_treatment(sintomas_processados, idade_input, peso_input)
         
-        if not opcoes:
-            st.info("Nenhum medicamento correspondente encontrado para os termos digitados.")
-        else:
-            st.success(f"✅ Foram encontradas correspondências na base de dados!")
-            
+        if opcoes:
+            st.success(f"✅ Foram encontradas correspondências para os critérios informados!")
             for opcao in opcoes:
                 with st.expander(f"💊 {opcao['medicamento']} - {opcao['apresentacao']}"):
                     st.write(f"**Princípio Ativo:** {opcao['principio_ativo']}")
@@ -149,3 +173,5 @@ if submit_button:
                     st.write(f"**Classe de Receita:** {opcao['tipo_receita']}")
                     if pd.notna(opcao['alerta_alergia']):
                         st.error(f"⚠️ **Aviso de Segurança:** Validar histórico de alergia a: {opcao['alerta_alergia']}.")
+        else:
+            st.info("Nenhum medicamento correspondente encontrado para os termos digitados.")
