@@ -1,58 +1,57 @@
-import requests
-import urllib.parse
+import pandas as pd
+import streamlit as st
 
-# ---------------------------------------------------------
-# MÓDULO DE INTEGRAÇÃO ANVISA (Evolução do BulaController V1)
-# ---------------------------------------------------------
-
-def buscar_bula_anvisa(nome_medicamento, principio_ativo):
+@st.cache_data
+def carregar_banco_medicamentos():
     """
-    Simula a consulta ao portal da Anvisa para resgatar o link da bula.
-    Garante que a funcionalidade do Node.js antigo seja preservada e aprimorada no Python.
+    Data Warehouse do Lumina Med:
+    Lê o CSV em milissegundos. Pandas aguenta milhões de linhas, o seu arquivo é super leve!
     """
-    print(f"📡 Iniciando varredura na Anvisa para: {nome_medicamento}...")
-    
-    # Tratamento de texto para URL (ex: "Dipirona Sódica" vira "Dipirona%20S%C3%B3dica")
-    termo_busca = urllib.parse.quote(nome_medicamento)
-    
-    # URL de busca do Bulário Eletrônico da Anvisa (Padrão Oficial)
-    url_bulario = f"https://consultas.anvisa.gov.br/#/bulario/q/?nomeProduto={termo_busca}"
-    
-    # Construção do pacote de dados da bula
-    dados_bula = {
-        "status": "sucesso",
-        "medicamento": nome_medicamento,
-        "principio_ativo": principio_ativo,
-        "link_consulta": url_bulario,
-        "mensagem_medico": "Link oficial gerado para consulta da bula do paciente e do profissional."
-    }
-    
-    # Se estivéssemos consumindo uma API JSON da Anvisa, o código faria:
-    # response = requests.get(api_url)
-    # if response.status_code == 200: return response.json()
-    
-    return dados_bula
-
-def extrair_alertas_anvisa(principio_ativo):
-    """
-    Cruza o princípio ativo com restrições conhecidas da agência reguladora.
-    """
-    alertas_criticos = {
-        "DIPIRONA": "Risco de agranulocitose (raro). Proibido em alguns países, permitido pela Anvisa.",
-        "IBUPROFENO": "Evitar uso prolongado em pacientes com insuficiência renal ou histórico de úlcera.",
-        "AMOXICILINA": "Verificar histórico de hipersensibilidade a penicilinas.",
-        "CORTICOIDE": "Uso prolongado requer desmame gradual para evitar insuficiência adrenal."
-    }
-    
-    for chave, alerta in alertas_criticos.items():
-        if chave in principio_ativo.upper():
-            return alerta
+    try:
+        # Lê o arquivo forçando o motor a aceitar acentos e identificar as colunas corretamente
+        df = pd.read_csv('lista_medicamentos (1).xls - Planilha1.csv', sep=',', on_bad_lines='skip')
+        
+        # Estrutura: { "Classe": { "Principio": ["Apresentacao1", "Apresentacao2"] } }
+        banco_completo = {}
+        
+        for _, row in df.iterrows():
+            # AGORA SIM! Pegando os nomes EXATOS das colunas da sua planilha
+            classe = str(row.get('CLASSE TERAPÊUTICA', 'Outros')).strip().upper()
+            principio = str(row.get('SUBSTÂNCIA', 'Desconhecido')).strip().upper()
+            apresentacao = str(row.get('APRESENTAÇÃO', 'Padrão')).strip()
             
-    return "Nenhum alerta crítico fora do padrão na base de extração rápida."
+            # Se a linha estiver vazia, ignora e pula para a próxima
+            if pd.isna(row.get('SUBSTÂNCIA')) or principio == 'NAN' or principio == 'DESCONHECIDO':
+                continue
+                
+            if classe not in banco_completo:
+                banco_completo[classe] = {}
+            
+            if principio not in banco_completo[classe]:
+                banco_completo[classe][principio] = []
+                
+            if apresentacao not in banco_completo[classe][principio]:
+                banco_completo[classe][principio].append(apresentacao)
+                
+        return banco_completo
+    except Exception as e:
+        print(f"Erro Crítico de Leitura: {e}")
+        return {}
 
-# Teste isolado do motor
-if __name__ == "__main__":
-    resultado = buscar_bula_anvisa("Amoxicilina", "Amoxicilina Tri-hidratada")
-    print("\n✅ Resultado da Integração Anvisa:")
-    print(f"Link: {resultado['link_consulta']}")
-    print(f"Alerta: {extrair_alertas_anvisa(resultado['principio_ativo'])}")
+def buscar_apresentacoes(principio_alvo, banco):
+    """Busca as miligramagens exatas de um remédio no banco de dados"""
+    if not banco:
+        return []
+        
+    principio_alvo = str(principio_alvo).upper().strip()
+    # Pega apenas o primeiro nome (ex: se a IA sugerir "Ibuprofeno Sódico", busca por "IBUPROFENO")
+    primeiro_nome = principio_alvo.split()[0] 
+    
+    apresentacoes_encontradas = []
+    for classe, principios in banco.items():
+        for principio, apresentacoes in principios.items():
+            if primeiro_nome in principio:
+                apresentacoes_encontradas.extend(apresentacoes)
+                
+    # Remove duplicatas e retorna até as 5 principais apresentações encontradas
+    return list(dict.fromkeys(apresentacoes_encontradas))[:5]
