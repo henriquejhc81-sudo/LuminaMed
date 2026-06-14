@@ -1,57 +1,53 @@
-import pandas as pd
-import streamlit as st
+import json
+import requests
+from motor_anvisa import buscar_bula_anvisa
+from motor_dados import carregar_banco_medicamentos, buscar_apresentacoes
 
-@st.cache_data
-def carregar_banco_medicamentos():
-    """
-    Data Warehouse do Lumina Med:
-    Lê o CSV em milissegundos. Pandas aguenta milhões de linhas, o seu arquivo é super leve!
-    """
-    try:
-        # Lê o arquivo forçando o motor a aceitar acentos e identificar as colunas corretamente
-        df = pd.read_csv('lista_medicamentos (1).xls - Planilha1.csv', sep=',', on_bad_lines='skip')
-        
-        # Estrutura: { "Classe": { "Principio": ["Apresentacao1", "Apresentacao2"] } }
-        banco_completo = {}
-        
-        for _, row in df.iterrows():
-            # AGORA SIM! Pegando os nomes EXATOS das colunas da sua planilha
-            classe = str(row.get('CLASSE TERAPÊUTICA', 'Outros')).strip().upper()
-            principio = str(row.get('SUBSTÂNCIA', 'Desconhecido')).strip().upper()
-            apresentacao = str(row.get('APRESENTAÇÃO', 'Padrão')).strip()
-            
-            # Se a linha estiver vazia, ignora e pula para a próxima
-            if pd.isna(row.get('SUBSTÂNCIA')) or principio == 'NAN' or principio == 'DESCONHECIDO':
-                continue
-                
-            if classe not in banco_completo:
-                banco_completo[classe] = {}
-            
-            if principio not in banco_completo[classe]:
-                banco_completo[classe][principio] = []
-                
-            if apresentacao not in banco_completo[classe][principio]:
-                banco_completo[classe][principio].append(apresentacao)
-                
-        return banco_completo
-    except Exception as e:
-        print(f"Erro Crítico de Leitura: {e}")
-        return {}
+def consultar_llm_com_healer(prompt, chaves_api):
+    # Rota 1: OpenRouter
+    if chaves_api.get('openrouter'):
+        try:
+            url = "https://openrouter.ai/api/v1/chat/completions"
+            payload = {"model": "meta-llama/llama-3.1-8b-instruct", "messages": [{"role": "user", "content": prompt}], "temperature": 0.1}
+            headers = {"Authorization": f"Bearer {chaves_api['openrouter']}", "Content-Type": "application/json"}
+            res = requests.post(url, json=payload, headers=headers, timeout=8)
+            if res.status_code == 200: return res.json()['choices'][0]['message']['content'], "OpenRouter"
+        except: pass
 
-def buscar_apresentacoes(principio_alvo, banco):
-    """Busca as miligramagens exatas de um remédio no banco de dados"""
-    if not banco:
-        return []
-        
-    principio_alvo = str(principio_alvo).upper().strip()
-    # Pega apenas o primeiro nome (ex: se a IA sugerir "Ibuprofeno Sódico", busca por "IBUPROFENO")
-    primeiro_nome = principio_alvo.split()[0] 
+    # Rota 2: Groq
+    if chaves_api.get('groq'):
+        try:
+            url = "https://api.groq.com/openai/v1/chat/completions"
+            payload = {"model": "llama-3.3-70b-versatile", "messages": [{"role": "user", "content": prompt}], "temperature": 0.1}
+            headers = {"Authorization": f"Bearer {chaves_api['groq']}", "Content-Type": "application/json"}
+            res = requests.post(url, json=payload, headers=headers, timeout=8)
+            if res.status_code == 200: return res.json()['choices'][0]['message']['content'], "Groq"
+        except: pass
+
+    # Rota 3: Gemini
+    if chaves_api.get('gemini'):
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={chaves_api['gemini']}"
+            payload = {"contents": [{"parts": [{"text": prompt}]}]}
+            res = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=8)
+            if res.status_code == 200: return res.json()['candidates'][0]['content']['parts'][0]['text'], "Gemini"
+        except: pass
+
+    return None, "⚠️ FALHA NAS APIs"
+
+def listar_opcoes_tratamento(sintomas, alergias, chaves_api):
+    """A IA sugere o tratamento, e nós validamos contra a folha de cálculo CSV"""
     
-    apresentacoes_encontradas = []
-    for classe, principios in banco.items():
-        for principio, apresentacoes in principios.items():
-            if primeiro_nome in principio:
-                apresentacoes_encontradas.extend(apresentacoes)
-                
-    # Remove duplicatas e retorna até as 5 principais apresentações encontradas
-    return list(dict.fromkeys(apresentacoes_encontradas))[:5]
+    prompt = f"""
+    Atue como Farmacêutico Clínico rigoroso.
+    Paciente: Sintomas "{sintomas}". Alergias: "{alergias}".
+    
+    Liste 4 Princípios Ativos genéricos altamente indicados para o quadro.
+    Responda ESTRITAMENTE em formato JSON:
+    {{"opcoes": ["Principio1", "Principio2", "Principio3", "Principio4"]}}
+    """
+    
+    resposta, _ = consultar_llm_com_healer(prompt, chaves_api)
+    
+    try:
+        if "
