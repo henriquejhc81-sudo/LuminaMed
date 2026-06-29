@@ -76,12 +76,12 @@ def gerar_prontuario_final(escolha_final, dados_paciente, chaves_api):
     - Posologia Matemática Exata.
     - Análise de Função Renal/Interações.
     - Contraindicações.
-    - Gere um link para busca da Bula Oficial da ANVISA para o princípio ativo.
+    - Gere o Link para a Bula: Crie EXATAMENTE este link markdown, substituindo NOME_DO_REMEDIO pelo princípio ativo selecionado (sem acentos e espaços substituídos por %20): 
+    [Consultar Bula Oficial na ANVISA](https://consultas.anvisa.gov.br/#/bulario/q/?nomeProduto=NOME_DO_REMEDIO)
     
     Seja claro, objetivo e profissional.
     """
     
-    # Tenta Groq primeiro, se falhar tenta OpenRouter
     resposta = consultar_llm_direto("groq", prompt, chaves_api.get('groq'))
     if not resposta:
         resposta = consultar_llm_direto("openrouter", prompt, chaves_api.get('openrouter'))
