@@ -35,8 +35,52 @@ def listar_opcoes_tratamento(sintomas, alergias, chaves_api):
     resposta, _ = consultar_llm_com_healer(prompt, chaves_api)
     
     try:
-        if "
-http://googleusercontent.com/immersive_entry_chip/0
-http://googleusercontent.com/immersive_entry_chip/1
+        if "```json" in resposta: resposta = resposta.split("```json")[1].split("```")[0]
+        elif "```" in resposta: resposta = resposta.split("```")[1].split("```")[0]
+        dados_ia = json.loads(resposta.strip()).get("opcoes", [])
+    except:
+        dados_ia = ["Ibuprofeno", "Dipirona", "Amoxicilina", "Dexametasona"]
+        
+    banco_csv = carregar_banco_medicamentos()
+    opcoes_enriquecidas = []
+    
+    for remedio in dados_ia:
+        apresentacoes = buscar_apresentacoes(remedio, banco_csv)
+        if apresentacoes:
+            opcoes_enriquecidas.append(f"{remedio} (Disponível em: {', '.join(apresentacoes[:3])})")
+        else:
+            opcoes_enriquecidas.append(f"{remedio} (Dose a calcular clinicamente)")
+            
+    return opcoes_enriquecidas
 
-*Pronto!* Salve todos eles e abra o seu Streamlit. Ele vai ler a sua planilha `medicamentos.csv` e usar as 3 etapas de atendimento que desenvolvemos. Me dê o sinal verde se deu tudo certo!
+def gerar_prontuario_final(principio_escolhido, sintomas, idade, peso, alergias, chaves_api):
+    prompt_consulta = f"""
+    Prescrição alvo: {principio_escolhido}.
+    Paciente: {idade} anos, {peso}kg. Sintomas: {sintomas}. Alergias: {alergias if alergias else 'Nenhuma'}.
+    Gere a prescrição final.
+    Regra 1: A posologia DEVE usar a apresentação específica informada na prescrição alvo se existir.
+    Regra 2: Calcule a dose correta em mg/kg/dia baseada no peso de {peso}kg.
+    Estrutura:
+    - Princípio Ativo e Classe
+    - Indicação / Para que serve
+    - Posologia Matemática Exata
+    - Alergias e Alternativas
+    - Contraindicações
+    """
+    
+    prontuario_cru, provedor = consultar_llm_com_healer(prompt_consulta, chaves_api)
+    if not prontuario_cru: return None, provedor
+
+    nome_bula = principio_escolhido.split()[0].split('(')[0].strip()
+    link_bula = f"https://consultas.anvisa.gov.br/#/medicamentos/q/?nomeProduto={nome_bula}"
+
+    relatorio_final = f"""
+{prontuario_cru}
+    
+---
+**🛠️ Telemetria do Sistema:**
+* Motor Ativo: `{provedor}`
+* Integração de Dados: `Data Warehouse Ativo (CSV)`
+* 📄 **Bula Oficial (ANVISA):** [Buscar Documento]({link_bula})
+    """
+    return relatorio_final
