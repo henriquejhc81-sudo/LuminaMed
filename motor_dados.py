@@ -1,22 +1,15 @@
 import pandas as pd
 import streamlit as st
 import os
-import glob
 
 @st.cache_data
 def carregar_banco_medicamentos():
-    """
-    Data Warehouse (Auto-Detect):
-    Procura automaticamente qualquer arquivo CSV na pasta e extrai os dados!
-    """
-    # Procura todos os arquivos que terminam com .csv
-    arquivos_csv = glob.glob("*.csv")
+    arquivo = 'medicamentos.csv'
     
-    if not arquivos_csv:
-        st.error("🚨 NENHUM ARQUIVO CSV ENCONTRADO. Faça o upload da sua planilha no GitHub.")
+    if not os.path.exists(arquivo):
+        st.error(f"🚨 ARQUIVO NÃO ENCONTRADO: '{arquivo}'. Certifique-se de fazer o upload do CSV.")
         return {}
 
-    arquivo_alvo = arquivos_csv[0] # Pega o arquivo que ele achar (ex: medicamentos_2.csv)
     banco_completo = {}
     df = None
     
@@ -30,7 +23,7 @@ def carregar_banco_medicamentos():
     
     for config in configuracoes:
         try:
-            temp_df = pd.read_csv(arquivo_alvo, sep=config['sep'], encoding=config['enc'], on_bad_lines='skip')
+            temp_df = pd.read_csv(arquivo, sep=config['sep'], encoding=config['enc'], on_bad_lines='skip')
             if not temp_df.empty and len(temp_df.columns) > 1:
                 df = temp_df
                 break 
@@ -38,12 +31,11 @@ def carregar_banco_medicamentos():
             continue
             
     if df is None or df.empty:
-        st.error(f"🚨 Não foi possível ler o arquivo {arquivo_alvo}. Salve como CSV UTF-8 no Excel.")
+        st.error("🚨 ERRO DE LEITURA: O arquivo está vazio ou o formato está errado.")
         return {}
 
     try:
         df.columns = [str(c).strip().upper() for c in df.columns]
-        
         col_substancia = 'SUBSTÂNCIA' if 'SUBSTÂNCIA' in df.columns else 'PRINCIPIO ATIVO' if 'PRINCIPIO ATIVO' in df.columns else df.columns[0]
         col_apresentacao = 'APRESENTAÇÃO' if 'APRESENTAÇÃO' in df.columns else 'APRESENTACAO' if 'APRESENTACAO' in df.columns else df.columns[2]
         col_classe = 'CLASSE TERAPÊUTICA' if 'CLASSE TERAPÊUTICA' in df.columns else 'CLASSE' if 'CLASSE' in df.columns else df.columns[3]
@@ -63,10 +55,12 @@ def carregar_banco_medicamentos():
                 
         return banco_completo
     except Exception as e:
+        st.error(f"🚨 ERRO NAS COLUNAS: Não consegui achar as colunas corretas. Erro: {str(e)}")
         return {}
 
 def buscar_apresentacoes(principio_alvo, banco):
-    if not banco: return []
+    if not banco:
+        return []
     termo_busca = str(principio_alvo).upper().strip().split()[0] 
     encontrados = []
     for classe, principios in banco.items():
