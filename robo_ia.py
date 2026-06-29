@@ -57,19 +57,33 @@ def listar_opcoes_tratamento(sintomas, alergias, uso_continuo, chaves_api):
     except Exception as e:
         return [f"Erro ao ler os dados da IA: {str(e)}"]
 
-def gerar_prontuario_final(dados_sessao, chaves_api):
+def gerar_prontuario_final(escolha_final, dados_paciente, chaves_api):
     """
-    Função necessária para não gerar erro de importação no app.py
-    Gera o resumo final do atendimento.
+    Gera o resumo final do atendimento com base na escolha exata do medicamento
+    e nos dados biométricos/clínicos do paciente.
     """
     prompt = f"""
-    Atue como Médico Clínico. Escreva um Prontuário rápido (Resumo do Atendimento) 
-    com base nestas informações: {dados_sessao}.
+    Atue como Médico Clínico e Farmacêutico. Escreva um Prontuário rápido (Resumo do Atendimento).
+    
+    DADOS DO PACIENTE:
+    {dados_paciente}
+    
+    MEDICAMENTO SELECIONADO:
+    {escolha_final}
+    
+    DIRETRIZES DO LAUDO (Markdown):
+    - Princípio Ativo e Indicação.
+    - Posologia Matemática Exata.
+    - Análise de Função Renal/Interações.
+    - Contraindicações.
+    - Gere um link para busca da Bula Oficial da ANVISA para o princípio ativo.
+    
     Seja claro, objetivo e profissional.
     """
     
+    # Tenta Groq primeiro, se falhar tenta OpenRouter
     resposta = consultar_llm_direto("groq", prompt, chaves_api.get('groq'))
     if not resposta:
         resposta = consultar_llm_direto("openrouter", prompt, chaves_api.get('openrouter'))
         
-    return resposta if resposta else "Falha ao gerar o prontuário final."
+    return resposta if resposta else "Falha de conexão com os motores de IA ao gerar o prontuário final."
