@@ -24,10 +24,10 @@ def consultar_llm_direto(provedor, prompt, chave):
 
 def listar_opcoes_tratamento(sintomas, alergias, chaves_api):
     prompt = f"""
-    Atue como Farmacêutico. Usuário digitou: "{sintomas}". Alergias: "{alergias}".
+    Atue como Farmacêutico Clínico Sênior. Usuário digitou: "{sintomas}". Alergias: "{alergias}".
     1. Se for nome de remédio (ex: Amoxicilina), liste ele e 2 da mesma classe.
-    2. Se for sintoma, liste de 5 a 8 princípios ativos indicados.
-    Responda ESTRITAMENTE em JSON: {{"opcoes": ["Remedio1", "Remedio2"]}}
+    2. Se for sintoma, liste de 8 a 12 princípios ativos indicados (busque variedade: ex. se dor, liste analgésicos E anti-inflamatórios).
+    Responda ESTRITAMENTE em JSON: {{"opcoes": ["Remedio1", "Remedio2", "Remedio3"]}}
     """
     
     resposta = consultar_llm_direto("groq", prompt, chaves_api.get('groq'))
@@ -35,7 +35,3 @@ def listar_opcoes_tratamento(sintomas, alergias, chaves_api):
     
     try:
         if "
-http://googleusercontent.com/immersive_entry_chip/0
-http://googleusercontent.com/immersive_entry_chip/1
-
-Se o botão de copiar não aparecer e precisar de selecionar com o rato, desça até à **última linha de cada código** e confirme que apanhou até à última palavra! Pode salvar no GitHub e o ecrã vermelho desaparecerá na hora.
