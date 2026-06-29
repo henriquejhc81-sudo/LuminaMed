@@ -30,16 +30,16 @@ st.markdown("### Terminal Clínico CDSS")
 st.markdown("---")
 
 if st.session_state.etapa == 1:
-    st.markdown("<div class='status-box'><b>ETAPA 1:</b> Triagem do Paciente</div>", unsafe_allow_html=True)
-    sintomas = st.text_area("Quadro clínico do paciente:")
+    st.markdown("<div class='status-box'><b>ETAPA 1:</b> Triagem ou Busca Direta</div>", unsafe_allow_html=True)
+    sintomas = st.text_area("Quadro clínico OU Nome do medicamento (ex: Dor de coluna, Amoxicilina):")
     alergias = st.text_input("Alergias (Opcional):")
     col1, col2 = st.columns(2)
     idade = col1.number_input("Idade:", min_value=0, step=1, value=None)
     peso = col2.number_input("Peso (kg):", min_value=0.0, step=0.5, value=None)
     
-    if st.button("🔍 Buscar Tratamentos"):
+    if st.button("🔍 Analisar e Buscar"):
         if sintomas and idade is not None and peso is not None:
-            with st.spinner("Analisando quadro e cruzando com CSV..."):
+            with st.spinner("Acionando IA e cruzando com Estoque (CSV)..."):
                 opcoes = listar_opcoes_tratamento(sintomas, alergias, chaves_api)
                 if opcoes:
                     st.session_state.dados = {'sintomas': sintomas, 'idade': idade, 'peso': peso, 'alergias': alergias}
@@ -48,7 +48,7 @@ if st.session_state.etapa == 1:
                     st.rerun()
 
 elif st.session_state.etapa == 2:
-    st.markdown("<div class='status-box'><b>ETAPA 2:</b> Escolha o Princípio Ativo</div>", unsafe_allow_html=True)
+    st.markdown("<div class='status-box'><b>ETAPA 2:</b> Escolha a Apresentação</div>", unsafe_allow_html=True)
     escolha = st.radio("Selecione para calcular dosagem:", st.session_state.opcoes)
     
     colA, colB = st.columns(2)
@@ -61,14 +61,17 @@ elif st.session_state.etapa == 2:
         if st.button("🔄 Voltar"): resetar(); st.rerun()
 
 elif st.session_state.etapa == 3:
-    st.markdown("<div class='status-box'><b>ETAPA 3:</b> Prontuário Finalizado</div>", unsafe_allow_html=True)
-    with st.spinner("Aplicando regras matemáticas..."):
+    st.markdown("<div class='status-box'><b>ETAPA 3:</b> Auditoria Final</div>", unsafe_allow_html=True)
+    with st.spinner("Consenso Multi-IA: Calculando doses e auditando limites..."):
         prontuario = gerar_prontuario_final(
             st.session_state.escolha_final, st.session_state.dados['sintomas'], 
             st.session_state.dados['idade'], st.session_state.dados['peso'], 
             st.session_state.dados['alergias'], chaves_api
         )
-        st.success("✅ Veredito Validado!")
-        st.info(prontuario)
+        if prontuario:
+            st.success("✅ Veredito Clínico Auditado pelo Algoritmo Juiz!")
+            st.info(prontuario)
+        else:
+            st.error("Falha ao gerar prontuário.")
         
     if st.button("🔄 Nova Consulta"): resetar(); st.rerun()
