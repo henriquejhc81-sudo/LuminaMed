@@ -15,19 +15,24 @@ def consultar_llm_direto(provedor, prompt, chave):
         else:
             return None
             
-        res = requests.post(url, json=payload, headers=headers, timeout=10)
+        res = requests.post(url, json=payload, headers=headers, timeout=12)
         if res.status_code == 200:
             return res.json()['choices'][0]['message']['content']
     except:
         pass
     return None
 
-def listar_opcoes_tratamento(sintomas, alergias, chaves_api):
+def listar_opcoes_tratamento(sintomas, alergias, uso_continuo, chaves_api):
     prompt = f"""
-    Atue como Farmacêutico. Usuário digitou: "{sintomas}". Alergias: "{alergias}".
-    1. Se for nome de remédio (ex: Amoxicilina), liste ele e 2 da mesma classe.
-    2. Se for sintoma, liste de 5 a 8 princípios ativos indicados.
-    Responda ESTRITAMENTE em JSON: {{"opcoes": ["Remedio1", "Remedio2"]}}
+    Atue como Farmacêutico Clínico Sênior. 
+    Usuário: "{sintomas}". Alergias: "{alergias}". Uso Contínuo: "{uso_continuo}".
+    
+    DIRETRIZ DE SEGURANÇA:
+    NÃO sugira medicamentos que tenham interação grave com os medicamentos de Uso Contínuo relatados.
+    
+    1. Se for nome de remédio, liste ele e 2 alternativas da mesma classe (se seguro).
+    2. Se for sintoma, liste de 8 a 12 princípios ativos altamente indicados.
+    Responda ESTRITAMENTE em JSON: {{"opcoes": ["Remedio1", "Remedio2", "Remedio3"]}}
     """
     
     resposta = consultar_llm_direto("groq", prompt, chaves_api.get('groq'))
@@ -35,7 +40,3 @@ def listar_opcoes_tratamento(sintomas, alergias, chaves_api):
     
     try:
         if "
-http://googleusercontent.com/immersive_entry_chip/0
-http://googleusercontent.com/immersive_entry_chip/1
-
-Se o botão de copiar não aparecer e precisar de selecionar com o rato, desça até à **última linha de cada código** e confirme que apanhou até à última palavra! Pode salvar no GitHub e o ecrã vermelho desaparecerá na hora.
