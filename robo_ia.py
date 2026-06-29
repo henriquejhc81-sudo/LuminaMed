@@ -40,3 +40,7 @@ def listar_opcoes_tratamento(sintomas, alergias, uso_continuo, chaves_api):
     
     try:
         if "
+http://googleusercontent.com/immersive_entry_chip/0
+http://googleusercontent.com/immersive_entry_chip/1
+
+Faça a verificação da última linha. Estou na torcida para dar tudo certo!
