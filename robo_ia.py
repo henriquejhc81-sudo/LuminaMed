@@ -1,10 +1,8 @@
 import json
 import requests
-from motor_anvisa import buscar_bula_anvisa
 from motor_dados import carregar_banco_medicamentos, buscar_apresentacoes
 
 def consultar_llm_com_healer(prompt, chaves_api):
-    # Rota 1: OpenRouter
     if chaves_api.get('openrouter'):
         try:
             url = "https://openrouter.ai/api/v1/chat/completions"
@@ -14,7 +12,6 @@ def consultar_llm_com_healer(prompt, chaves_api):
             if res.status_code == 200: return res.json()['choices'][0]['message']['content'], "OpenRouter"
         except: pass
 
-    # Rota 2: Groq
     if chaves_api.get('groq'):
         try:
             url = "https://api.groq.com/openai/v1/chat/completions"
@@ -27,12 +24,9 @@ def consultar_llm_com_healer(prompt, chaves_api):
     return None, "⚠️ FALHA NAS APIs"
 
 def listar_opcoes_tratamento(sintomas, alergias, chaves_api):
-    """A IA sugere o tratamento, e nós validamos contra a folha de cálculo CSV"""
-    
     prompt = f"""
     Atue como Farmacêutico Clínico rigoroso.
     Paciente: Sintomas "{sintomas}". Alergias: "{alergias}".
-    
     Liste 4 Princípios Ativos genéricos altamente indicados para o quadro.
     Responda ESTRITAMENTE em formato JSON:
     {{"opcoes": ["Principio1", "Principio2", "Principio3", "Principio4"]}}
@@ -42,3 +36,7 @@ def listar_opcoes_tratamento(sintomas, alergias, chaves_api):
     
     try:
         if "
+http://googleusercontent.com/immersive_entry_chip/0
+http://googleusercontent.com/immersive_entry_chip/1
+
+*Pronto!* Salve todos eles e abra o seu Streamlit. Ele vai ler a sua planilha `medicamentos.csv` e usar as 3 etapas de atendimento que desenvolvemos. Me dê o sinal verde se deu tudo certo!
