@@ -18,7 +18,8 @@ def consultar_llm_direto(provedor, prompt, chave):
         res = requests.post(url, json=payload, headers=headers, timeout=12)
         if res.status_code == 200:
             return res.json()['choices'][0]['message']['content']
-    except:
+    except Exception as e:
+        print(f"Erro no provedor {provedor}: {e}")
         pass
     return None
 
@@ -35,8 +36,40 @@ def listar_opcoes_tratamento(sintomas, alergias, uso_continuo, chaves_api):
     Responda ESTRITAMENTE em JSON: {{"opcoes": ["Remedio1", "Remedio2", "Remedio3"]}}
     """
     
+    # Tenta Groq primeiro, se falhar tenta OpenRouter
     resposta = consultar_llm_direto("groq", prompt, chaves_api.get('groq'))
-    if not resposta: resposta = consultar_llm_direto("openrouter", prompt, chaves_api.get('openrouter'))
+    if not resposta: 
+        resposta = consultar_llm_direto("openrouter", prompt, chaves_api.get('openrouter'))
     
+    if not resposta:
+        return ["Falha na conexão com a Inteligência Artificial. Verifique as Chaves API."]
+        
     try:
-        if "
+        # Limpeza inteligente: As IAs costumam mandar o JSON dentro de blocos de formatação Markdown (```json)
+        texto_limpo = resposta
+        if "```json" in texto_limpo:
+            texto_limpo = texto_limpo.split("```json")[1].split("```")[0]
+        elif "```" in texto_limpo:
+            texto_limpo = texto_limpo.split("```")[1].split("```")[0]
+            
+        dados = json.loads(texto_limpo.strip())
+        return dados.get("opcoes", ["Nenhuma opção encontrada na resposta da IA."])
+    except Exception as e:
+        return [f"Erro ao ler os dados da IA: {str(e)}"]
+
+def gerar_prontuario_final(dados_sessao, chaves_api):
+    """
+    Função necessária para não gerar erro de importação no app.py
+    Gera o resumo final do atendimento.
+    """
+    prompt = f"""
+    Atue como Médico Clínico. Escreva um Prontuário rápido (Resumo do Atendimento) 
+    com base nestas informações: {dados_sessao}.
+    Seja claro, objetivo e profissional.
+    """
+    
+    resposta = consultar_llm_direto("groq", prompt, chaves_api.get('groq'))
+    if not resposta:
+        resposta = consultar_llm_direto("openrouter", prompt, chaves_api.get('openrouter'))
+        
+    return resposta if resposta else "Falha ao gerar o prontuário final."
