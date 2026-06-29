@@ -62,7 +62,7 @@ elif st.session_state.etapa == 2:
 
 elif st.session_state.etapa == 3:
     st.markdown("<div class='status-box'><b>ETAPA 3:</b> Prontuário Finalizado</div>", unsafe_allow_html=True)
-    with st.spinner("Aplicando regras matemáticas e gerando bula..."):
+    with st.spinner("Aplicando regras matemáticas..."):
         prontuario = gerar_prontuario_final(
             st.session_state.escolha_final, st.session_state.dados['sintomas'], 
             st.session_state.dados['idade'], st.session_state.dados['peso'], 
