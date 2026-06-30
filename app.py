@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import os
+import requests # Necessário para a API do OpenRouter/Groq
 
 # ==========================================
 # 1. CONFIGURAÇÃO DA INTERFACE PREMIUM
@@ -30,7 +31,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. ALGORITMO JUIZ: TRAVA DE ALERGIA ATC
+# 2. ALGORITMO JUIZ E MOTOR DE DADOS
 # ==========================================
 @st.cache_data
 def carregar_banco_medicamentos():
@@ -59,6 +60,54 @@ def auditar_alergias(input_alergia, df_medicamentos):
     
     medicamentos_bloqueados = df_medicamentos[df_medicamentos['Código ATC'].isin(codigos_atc_risco)]['Princípio Ativo'].unique().tolist()
     return nomes_familias, medicamentos_bloqueados
+
+# Função para chamar o Groq/OpenRouter (O Cérebro)
+def gerar_laudo_ia(medicamento, dados_paciente):
+    # Dica de segurança: Configure sua chave no painel "Secrets" do Streamlit (Settings > Secrets)
+    api_key = st.secrets.get("OPENROUTER_API_KEY", "") 
+    if not api_key:
+        return "⚠️ Chave de API não configurada no Streamlit Secrets. O laudo gerado pela IA não pôde ser processado."
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "HTTP-Referer": "https://luminamed.streamlit.app",
+        "X-Title": "Lumina Med CDSS"
+    }
+    
+    prompt = f"""Você é o Lumina Med, um sistema avançado de suporte a decisão clínica.
+    Atue como um Farmacologista Sênior e Auditor.
+    Gere um laudo rápido, direto e estruturado para:
+    Medicamento Selecionado: {medicamento}
+    
+    Perfil do Paciente:
+    - Idade: {dados_paciente['idade']} anos
+    - Peso: {dados_paciente['peso']} kg
+    - Sexo: {dados_paciente['sexo']}
+    - Sintomas/Quadro Clínico: {dados_paciente['sintomas']}
+    - Alergias declaradas: {dados_paciente['alergias'] if dados_paciente['alergias'] else 'Nenhuma'}
+    - Comorbidades: {', '.join(dados_paciente['comorbidades']) if dados_paciente['comorbidades'] else 'Não informadas'}
+    
+    O laudo deve conter estritamente:
+    1. Princípio Ativo e Indicação Básica
+    2. Posologia Recomendada (Ajustada para o peso/idade, com foco na bula brasileira da ANVISA)
+    3. Riscos e Interações (Baseado nas comorbidades e alergias)
+    4. Advertências Finais
+    
+    Seja técnico, evite rodeios e responda em Markdown."""
+
+    payload = {
+        "model": "meta-llama/llama-3-8b-instruct:free", # Você pode mudar para o Llama 3 70b ou outro de sua preferência no OpenRouter
+        "messages": [{"role": "user", "content": prompt}]
+    }
+
+    try:
+        response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
+        if response.status_code == 200:
+            return response.json()['choices'][0]['message']['content']
+        else:
+            return f"Erro na comunicação com a IA: {response.status_code} - {response.text}"
+    except Exception as e:
+        return f"Erro ao acessar a API: {e}"
 
 df_meds = carregar_banco_medicamentos()
 
@@ -134,7 +183,7 @@ if st.session_state.analise_concluida:
 
     opcoes_disponiveis = [
         "PARACETAMOL", "ASPIRINA", "NAPROXENO", "DICLOFENACO", "CETOPROFENO",
-        "FLURBIPROFENO", "BENZILMETILINDOL", "FENILBUTAZONA", "PIROXICAM", "TENOXICAM", "LORNOCICAM"
+        "FLURBIPROFENO", "BENZILMETILINDOL", "FENILBUTAZONA", "PIROXICAM", "TENOXICAM", "LORNOCICAM", "AMOXICILINA", "AZITROMICINA"
     ]
     
     opcoes_seguras = [med for med in opcoes_disponiveis if med not in lista_bloqueio]
@@ -150,16 +199,27 @@ if st.session_state.analise_concluida:
             
         if gerar_prontuario:
             st.success("Prontuário validado com Sucesso pelo Algoritmo Juiz!")
-            st.markdown(f"""
-            ### Prontuário Rápido (Auditoria Final)
-            * **Idade:** {idade} anos
-            * **Peso:** {peso} kg
-            * **Sintomas:** {sintomas}
-            * **Alergias:** {alergias if alergias else 'Não informadas'}
-            * **Uso contínuo:** {uso_continuo if uso_continuo else 'Não informado'}
-            * **Medicamento Selecionado:** {medicamento_selecionado}
-            """)
-            st.info("💡 A IA gerará o Laudo detalhado (Posologia, Interação Renal e Bula).")
+            
+            # Pacote de dados para a IA analisar
+            dados_para_ia = {
+                "idade": idade,
+                "peso": peso,
+                "sexo": sexo,
+                "sintomas": sintomas,
+                "alergias": alergias,
+                "comorbidades": comorbidades
+            }
+            
+            with st.spinner("🧠 O Algoritmo Juiz está processando a bula, posologia e analisando os limites de dose..."):
+                laudo_texto = gerar_laudo_ia(medicamento_selecionado, dados_para_ia)
+            
+            st.markdown("### Laudo de Auditoria Farmacológica")
+            st.info(laudo_texto)
+            
+            # Link da Bula (Bônus)
+            nome_pesquisa = medicamento_selecionado.lower().replace(" ", "+")
+            st.markdown(f"🔗 [Consultar Bula Oficial na ANVISA (Abre em nova aba)](https://consultas.anvisa.gov.br/#/bulario/q/?nomeProduto={nome_pesquisa})")
+            
             st.markdown("""
             ---
             > ⚠️ **Aviso Legal:** *Este documento é um relatório de inteligência artificial. Não constitui diagnóstico.*
