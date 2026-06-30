@@ -14,7 +14,6 @@ st.set_page_config(
 
 st.markdown("""
     <style>
-    /* Estilo do Botão Principal Azul Neon */
     div.stButton > button:first-child {
         background-color: #0056b3; color: white; border-radius: 8px;
         height: 3em; font-weight: 600; transition: all 0.3s ease;
@@ -35,16 +34,15 @@ st.markdown("""
 # ==========================================
 @st.cache_data
 def carregar_banco_medicamentos():
-    # Ele vai procurar o seu arquivo do Excel no GitHub
-    caminho_arquivo = "lista_remedios_estruturada.xlsx"
+    caminho_arquivo = "lista_remedios_estruturada.xlsx - Medicamentos_Estruturados.csv"
     if os.path.exists(caminho_arquivo):
         try:
-            return pd.read_excel(caminho_arquivo, sheet_name="Medicamentos_Estruturados")
+            return pd.read_csv(caminho_arquivo)
         except Exception as e:
-            st.error(f"Erro na leitura da planilha Excel: {e}")
+            st.error(f"Erro na leitura do arquivo de dados: {e}")
             return pd.DataFrame()
     else:
-        st.warning("⚠️ Planilha Excel não encontrada no sistema. Faça o upload no GitHub. A trava de alergia operará em modo reduzido.")
+        st.warning("⚠️ Arquivo de medicamentos não encontrado. A trava operará em modo reduzido.")
         return pd.DataFrame()
 
 def auditar_alergias(input_alergia, df_medicamentos):
@@ -52,20 +50,16 @@ def auditar_alergias(input_alergia, df_medicamentos):
         return [], []
     alergia_limpa = input_alergia.upper().strip()
     
-    # 1. Procura o remédio que o paciente tem alergia
     alergias_encontradas = df_medicamentos[df_medicamentos['Princípio Ativo'].str.contains(alergia_limpa, na=False)]
     if alergias_encontradas.empty:
         return [], []
         
-    # 2. Extrai o código da Família (ATC)
     codigos_atc_risco = alergias_encontradas['Código ATC'].unique().tolist()
     nomes_familias = alergias_encontradas['Classe/Família Terapêutica'].unique().tolist()
     
-    # 3. Lista todos os remédios do mundo que compartilham a mesma família perigosa
     medicamentos_bloqueados = df_medicamentos[df_medicamentos['Código ATC'].isin(codigos_atc_risco)]['Princípio Ativo'].unique().tolist()
     return nomes_familias, medicamentos_bloqueados
 
-# Carrega o banco de dados silenciamente na memória
 df_meds = carregar_banco_medicamentos()
 
 # ==========================================
@@ -82,7 +76,7 @@ st.markdown("#### 📋 ETAPA 1: Triagem e Histórico")
 
 col1, col2 = st.columns([2, 1])
 with col1:
-    sintomas = st.text_area("Quadro clínico OU Nome do medicamento (ex: Infecção urinária, Amoxicilina):", height=120)
+    sintomas = st.text_area("Quadro clínico OU Nome do medicamento:", height=120)
 with col2:
     uso_continuo = st.text_input("Uso contínuo (ex: Losartana):")
     alergias = st.text_input("⚠️ Alergias (ex: Ibuprofeno):")
@@ -98,7 +92,6 @@ with bio_col3:
 with bio_col4:
     creatinina = st.number_input("Creatinina (mg/dL) - Opcional:", min_value=0.0, max_value=15.0, step=0.1, value=0.0)
 
-# Expander de Sinais Vitais Oculto
 with st.expander("🩺 Sinais Vitais e Comorbidades (Avançado - Opcional)", expanded=False):
     vit_col1, vit_col2, vit_col3 = st.columns(3)
     with vit_col1:
@@ -121,37 +114,33 @@ _, btn_col, _ = st.columns([1, 2, 1])
 with btn_col:
     analisar = st.button("🔍 Analisar e Buscar")
 
-# Mantendo o estado da tela para não apagar ao clicar
 if "analise_concluida" not in st.session_state:
     st.session_state.analise_concluida = False
 
 if analisar:
     if not sintomas:
-        st.warning("⚠️ O campo de Quadro Clínico é obrigatório para iniciar a busca.")
+        st.warning("⚠️ O campo de Quadro Clínico é obrigatório.")
     else:
         st.session_state.analise_concluida = True
 
 if st.session_state.analise_concluida:
     st.markdown("### 💊 ETAPA 2: Escolha a Apresentação")
     
-    # Executa o Motor de Alergia Cruzada (Algoritmo Juiz)
     familias_risco, lista_bloqueio = auditar_alergias(alergias, df_meds)
     
     if familias_risco:
         st.error(f"🚨 **ALERTA DE SEGURANÇA MÁXIMA:** O paciente declarou alergia a '{alergias.upper()}'. O Algoritmo Juiz detectou risco de reação cruzada na família: **{familias_risco[0]}**.")
         st.warning("🛡️ **Ação do Sistema:** Todos os medicamentos da mesma família foram suprimidos do painel por segurança (Padrão Ouro de Auditoria).")
 
-    # Lista base do seu sistema (aqui você pode adicionar mais depois)
     opcoes_disponiveis = [
         "PARACETAMOL", "ASPIRINA", "NAPROXENO", "DICLOFENACO", "CETOPROFENO",
         "FLURBIPROFENO", "BENZILMETILINDOL", "FENILBUTAZONA", "PIROXICAM", "TENOXICAM", "LORNOCICAM"
     ]
     
-    # O FILTRO FATAL: Só deixa passar o que não estiver bloqueado
     opcoes_seguras = [med for med in opcoes_disponiveis if med not in lista_bloqueio]
     
     if not opcoes_seguras:
-        st.error("Nenhuma opção segura disponível na lista padrão para este quadro com as restrições atuais.")
+        st.error("Nenhuma opção segura disponível com as restrições atuais.")
     else:
         medicamento_selecionado = st.radio("Selecione para calcular dosagem:", opcoes_seguras)
         
@@ -170,10 +159,8 @@ if st.session_state.analise_concluida:
             * **Uso contínuo:** {uso_continuo if uso_continuo else 'Não informado'}
             * **Medicamento Selecionado:** {medicamento_selecionado}
             """)
-            
-            st.info("💡 Aqui o sistema integrará com a IA para gerar o Laudo detalhado (Posologia, Interação Renal e Bula) como no seu vídeo.")
-            
+            st.info("💡 A IA gerará o Laudo detalhado (Posologia, Interação Renal e Bula).")
             st.markdown("""
             ---
-            > ⚠️ **Aviso Legal:** *Este documento é um relatório de inteligência artificial destinado ao suporte de decisão clínica e análise de interações. Ele não constitui um diagnóstico médico e não substitui a avaliação de um profissional de saúde habilitado. Consulte sempre seu médico ou farmacêutico.*
+            > ⚠️ **Aviso Legal:** *Este documento é um relatório de inteligência artificial. Não constitui diagnóstico.*
             """)
