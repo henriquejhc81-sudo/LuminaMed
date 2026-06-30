@@ -1,103 +1,95 @@
 import streamlit as st
-from robo_ia import listar_opcoes_tratamento, gerar_prontuario_final
+import pandas as pd
+import os
 
-st.set_page_config(page_title="Lumina Med", page_icon="⚕️", layout="centered")
+# 1. CONFIGURAÇÃO DA INTERFACE (O Padrão Premium)
+st.set_page_config(
+    page_title="Lumina Med - CDSS Advanced",
+    page_icon="⚕️",
+    layout="wide", # Expandindo para tela cheia (dashboard hospitalar)
+    initial_sidebar_state="collapsed"
+)
 
+# Injeção de CSS para um acabamento moderno e botões responsivos
 st.markdown("""
-<style>
-    .stApp { background-color: #050b14; }
-    h1, h2, h3 { color: #00d2ff; }
-    div.stButton > button { background: linear-gradient(90deg, #00d2ff 0%, #3a7bd5 100%); color: #fff; width: 100%; border-radius: 8px;}
-    .status-box { padding: 15px; border-radius: 8px; background-color: #0b1423; border-left: 5px solid #00d2ff; margin-bottom: 20px;}
-    .alert-box { padding: 10px; border-radius: 5px; background-color: #4a0000; border-left: 5px solid #ff0000; color: #fff; margin-bottom: 15px;}
-</style>
+    <style>
+    /* Estilizando o botão principal para um azul médico vibrante */
+    div.stButton > button:first-child {
+        background-color: #0056b3;
+        color: white;
+        border-radius: 8px;
+        height: 3em;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        width: 100%;
+        border: none;
+    }
+    div.stButton > button:first-child:hover {
+        background-color: #003d82;
+        border: 1px solid #00bfff;
+        box-shadow: 0px 0px 15px rgba(0, 191, 255, 0.4);
+    }
+    /* Ajustes finos nos inputs */
+    .stTextInput > div > div > input, .stTextArea > div > textarea, .stNumberInput > div > div > input {
+        border-radius: 6px;
+    }
+    </style>
 """, unsafe_allow_html=True)
 
-chaves_api = {
-    "openrouter": st.secrets.get("OPENROUTER_API_KEY", ""),
-    "groq": st.secrets.get("GROQ_API_KEY", "")
-}
-
-if 'etapa' not in st.session_state: st.session_state.etapa = 1
-if 'opcoes' not in st.session_state: st.session_state.opcoes = []
-if 'dados' not in st.session_state: st.session_state.dados = {}
-
-def resetar():
-    st.session_state.etapa = 1
-    st.session_state.opcoes = []
-    st.session_state.dados = {}
-
+# 2. CABEÇALHO
 st.title("⚕️ Lumina Med")
-st.markdown("### Terminal Clínico CDSS Advanced")
+st.markdown("### **Terminal Clínico CDSS Advanced** | Auditoria e Triagem Inteligente")
+st.divider()
+
+# 3. MÓDULO DE TRIAGEM PRINCIPAL (Organizado em Colunas)
+st.markdown("#### 📋 ETAPA 1: Triagem e Histórico")
+
+col1, col2 = st.columns([2, 1])
+
+with col1:
+    motivo = st.text_area("Quadro clínico OU Nome do medicamento (ex: Infecção urinária, Amoxicilina):", height=120)
+
+with col2:
+    uso_continuo = st.text_input("Uso contínuo (ex: Losartana):")
+    alergias = st.text_input("⚠️ Alergias (ex: Ibuprofeno):", help="O motor cruzará a família ATC automaticamente para bloquear riscos.")
+
+st.markdown("#### 🧬 Perfil Biométrico")
+bio_col1, bio_col2, bio_col3, bio_col4 = st.columns(4)
+
+with bio_col1:
+    idade = st.number_input("Idade:", min_value=0, max_value=120, step=1)
+with bio_col2:
+    peso = st.number_input("Peso (kg):", min_value=0.0, max_value=300.0, step=0.1)
+with bio_col3:
+    sexo = st.selectbox("Sexo Biológico:", ["Masculino", "Feminino"])
+with bio_col4:
+    creatinina = st.number_input("Creatinina (mg/dL) - Opc.:", min_value=0.0, max_value=15.0, step=0.1, help="Para ajuste automático de Clearance Renal.")
+
+# 4. SINAIS VITAIS E COMORBIDADES (A Evolução Oculta/Opcional)
+st.markdown("---")
+with st.expander("🩺 Sinais Vitais e Comorbidades (Avançado - Opcional)", expanded=False):
+    st.info("Preencha apenas o que estiver disponível na triagem. O Algoritmo Juiz usará estes dados para refinar o cruzamento de riscos.")
+    
+    vit_col1, vit_col2, vit_col3 = st.columns(3)
+    with vit_col1:
+        pressao = st.text_input("Pressão Arterial (ex: 120/80):", placeholder="Opcional")
+    with vit_col2:
+        glicemia = st.number_input("Glicemia (mg/dL):", min_value=0, max_value=1000, step=1, value=0, help="Deixe 0 se não medido.")
+    with vit_col3:
+        temperatura = st.number_input("Temperatura (°C):", min_value=30.0, max_value=45.0, step=0.1, value=36.5)
+        
+    comorbidades = st.multiselect(
+        "Selecione Comorbidades Preexistentes:",
+        ["Hipertensão", "Diabetes Tipo 1", "Diabetes Tipo 2", "Asma", "Insuficiência Renal", "Insuficiência Cardíaca", "Doença Hepática", "DPOC"]
+    )
+
 st.markdown("---")
 
-if st.session_state.etapa == 1:
-    st.markdown("<div class='status-box'><b>ETAPA 1:</b> Triagem e Biometria</div>", unsafe_allow_html=True)
-    
-    sintomas = st.text_area("Quadro clínico OU Nome do medicamento (ex: Infecção urinária, Amoxicilina):")
-    
-    col_med, col_alergia = st.columns(2)
-    uso_continuo = col_med.text_input("Uso contínuo (ex: Losartana, Atenolol):")
-    alergias = col_alergia.text_input("Alergias (ex: Penicilina):")
-    
-    col1, col2, col3, col4 = st.columns(4)
-    idade = col1.number_input("Idade:", min_value=0, step=1, value=None)
-    peso = col2.number_input("Peso (kg):", min_value=0.0, step=0.5, value=None)
-    sexo = col3.selectbox("Sexo Biológico:", ["Masculino", "Feminino"])
-    creatinina = col4.number_input("Creatinina (mg/dL - opcional):", min_value=0.0, step=0.1, value=None)
-    
-    clearance = None
-    if st.button("🔍 Analisar e Buscar"):
-        if sintomas and idade is not None and peso is not None:
-            # Cálculo automático de Clearance de Creatinina (Cockcroft-Gault)
-            if creatinina and creatinina > 0:
-                clearance = ((140 - idade) * peso) / (72 * creatinina)
-                if sexo == "Feminino": clearance *= 0.85
-                st.session_state.clearance = round(clearance, 2)
-            else:
-                st.session_state.clearance = "Não informado"
+# Botão de Ação Centralizado
+_, btn_col, _ = st.columns([1, 2, 1])
+with btn_col:
+    iniciar_analise = st.button("🔍 Iniciar Auditoria Farmacológica")
 
-            with st.spinner("Analisando interações e buscando no Estoque (CSV)..."):
-                opcoes = listar_opcoes_tratamento(sintomas, alergias, uso_continuo, chaves_api)
-                if opcoes:
-                    st.session_state.dados = {
-                        'sintomas': sintomas, 'idade': idade, 'peso': peso, 
-                        'alergias': alergias, 'uso_continuo': uso_continuo,
-                        'clearance': st.session_state.clearance
-                    }
-                    st.session_state.opcoes = opcoes
-                    st.session_state.etapa = 2
-                    st.rerun()
-
-elif st.session_state.etapa == 2:
-    st.markdown("<div class='status-box'><b>ETAPA 2:</b> Escolha a Apresentação</div>", unsafe_allow_html=True)
-    
-    if st.session_state.dados.get('clearance') != "Não informado":
-        st.markdown(f"<div class='alert-box'>⚙️ <b>Clearance de Creatinina Estimado:</b> {st.session_state.dados['clearance']} mL/min (Atenção ao ajuste renal)</div>", unsafe_allow_html=True)
-    
-    escolha = st.radio("Selecione para calcular dosagem:", st.session_state.opcoes)
-    
-    colA, colB = st.columns(2)
-    with colA:
-        if st.button("✅ Gerar Prontuário Seguro"):
-            st.session_state.escolha_final = escolha
-            st.session_state.etapa = 3
-            st.rerun()
-    with colB:
-        if st.button("🔄 Voltar"): resetar(); st.rerun()
-
-elif st.session_state.etapa == 3:
-    st.markdown("<div class='status-box'><b>ETAPA 3:</b> Auditoria Final e Veredito</div>", unsafe_allow_html=True)
-    with st.spinner("Consenso Multi-IA: Auditando interações medicamentosas e limites de dose..."):
-        prontuario = gerar_prontuario_final(
-            st.session_state.escolha_final, 
-            st.session_state.dados, 
-            chaves_api
-        )
-        if prontuario:
-            st.success("✅ Prontuário Validado com Sucesso pelo Algoritmo Juiz!")
-            st.info(prontuario)
-        else:
-            st.error("Falha de comunicação com os motores de IA. Tente novamente.")
-        
-    if st.button("🔄 Nova Consulta"): resetar(); st.rerun()
+if iniciar_analise:
+    st.success("Motor de dados ativado. Aguardando integração do backend...")
+    # A lógica do backend de cruzamento ATC e LLM entrará aqui
