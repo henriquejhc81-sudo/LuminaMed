@@ -52,15 +52,10 @@ def carregar_e_adaptar_dados():
         return pd.DataFrame()
 
     try:
-        # Tenta ler com vírgula e pula linhas defeituosas para não travar o app
         df_bruto = pd.read_csv(nome_arquivo, sep=',', on_bad_lines='skip')
-        
-        # Se leu apenas 1 coluna, é porque o separador real era ponto e vírgula
         if len(df_bruto.columns) < 2:
             df_bruto = pd.read_csv(nome_arquivo, sep=';', on_bad_lines='skip')
-            
-    except Exception as e:
-        # Se falhar feio, tenta forçar com ponto e vírgula
+    except Exception:
         try:
             df_bruto = pd.read_csv(nome_arquivo, sep=';', on_bad_lines='skip')
         except Exception as erro_fatal:
@@ -69,29 +64,30 @@ def carregar_e_adaptar_dados():
 
     df_adaptado = pd.DataFrame()
     
-    # Extração segura das colunas (Mapeamento flexível)
+    # Extração segura das colunas
     df_adaptado['nome'] = df_bruto.get('PRODUTO', df_bruto.get('SUBSTÂNCIA', pd.Series(dtype='object')))
     df_adaptado['principio_ativo'] = df_bruto.get('SUBSTÂNCIA', pd.Series(dtype='object'))
     df_adaptado['apresentacao'] = df_bruto.get('APRESENTAÇÃO', 'Não informada')
     df_adaptado['classe_terapeutica'] = df_bruto.get('CLASSE TERAPÊUTICA', 'Geral')
     
-    # Se as colunas principais não existirem (ex: CSV em formato totalmente diferente)
     if df_adaptado['nome'].isnull().all() and len(df_bruto.columns) > 1:
-        st.warning("⚠️ O formato das colunas do CSV não é o esperado ('PRODUTO', 'SUBSTÂNCIA', etc).")
+        st.warning("⚠️ O formato das colunas do CSV não é o esperado.")
         return pd.DataFrame()
     
-    # Motor de Busca (NLP) focado na classe terapêutica
-    df_adaptado['sintomas_indicados'] = df_adaptado['classe_terapeutica'].astype(str).str.lower()
-    df_adaptado['alerta_alergia'] = df_adaptado['principio_ativo']
+    # SUPER COLUNA DE BUSCA: Junta o nome, princípio ativo e classe para não perder nada!
+    df_adaptado['termo_busca'] = (
+        df_adaptado['nome'].astype(str) + " " + 
+        df_adaptado['principio_ativo'].astype(str) + " " + 
+        df_adaptado['classe_terapeutica'].astype(str)
+    ).str.lower()
     
-    # Blindagem Matemática: Preparando estrutura para cálculos de dosagem
+    # Blindagem Matemática
     df_adaptado['idade_minima_meses'] = 0
     df_adaptado['dose_mg_kg_dia'] = 0.0
     df_adaptado['dose_maxima_diaria_mg'] = 0.0
     df_adaptado['frequencia_horas'] = 8
     df_adaptado['dose_padrao_adulto_mg'] = 0.0
 
-    # Limpeza de dados vazios
     df_adaptado['nome'] = df_adaptado['nome'].replace('', np.nan)
     return df_adaptado.dropna(subset=['nome'])
 
@@ -99,7 +95,6 @@ def carregar_e_adaptar_dados():
 def carregar_planilha_atc():
     caminho_arquivo = "lista_remedios_estruturada.csv"
     if not os.path.exists(caminho_arquivo): return pd.DataFrame()
-    
     try:
         df_atc = pd.read_csv(caminho_arquivo, sep=',', on_bad_lines='skip')
         if len(df_atc.columns) < 2:
@@ -126,8 +121,30 @@ df_atc = carregar_planilha_atc()
 
 def processar_sintomas(texto_sintomas):
     texto = texto_sintomas.lower().replace(',', ' ').replace('.', ' ')
-    for palavra in [' e ', ' com ', ' muita ', ' muito ', ' de ', ' dor ']: texto = texto.replace(palavra, ' ')
-    return [p.strip() for p in texto.split() if p.strip()]
+    
+    # Dicionário Clínico: Traduz sintomas leigos para os termos técnicos da sua planilha
+    dicionario_clinico = {
+        "dor": "analgésicos",
+        "febre": "antitérmicos",
+        "inflamação": "anti-inflamatórios",
+        "garganta": "anti-inflamatórios", 
+        "infecção": "antibióticos",
+        "alergia": "anti-histamínicos",
+        "tosse": "antitussígenos"
+    }
+    
+    termos_extras = []
+    for sintoma, termo_tecnico in dicionario_clinico.items():
+        if sintoma in texto:
+            termos_extras.append(termo_tecnico)
+            
+    for palavra in [' e ', ' com ', ' de ', ' para ']: 
+        texto = texto.replace(palavra, ' ')
+        
+    palavras_finais = [p.strip() for p in texto.split() if len(p.strip()) > 2]
+    palavras_finais.extend(termos_extras)
+    
+    return list(set(palavras_finais))
 
 def buscar_treatment_seguro(sintomas_lista, idade, peso, lista_bloqueio_alergia):
     resultados = []
@@ -135,10 +152,15 @@ def buscar_treatment_seguro(sintomas_lista, idade, peso, lista_bloqueio_alergia)
         
     for index, row in df_medicamentos.iterrows():
         principio_atual = str(row['principio_ativo']).upper()
-        if any(bloqueado in principio_atual for bloqueado in lista_bloqueio_alergia): continue
+        
+        # Validação de Alergia
+        if lista_bloqueio_alergia:
+            if any(bloqueado in principio_atual for bloqueado in lista_bloqueio_alergia): 
+                continue
 
-        sintomas_bula = str(row['sintomas_indicados']).lower()
-        if any(sintoma in sintomas_bula for sintoma in sintomas_lista):
+        # Busca Global
+        termos_bula = str(row['termo_busca'])
+        if any(sintoma in termos_bula for sintoma in sintomas_lista):
             if idade < (row['idade_minima_meses'] / 12): continue 
                 
             tratamento = {"medicamento": row['nome'], "principio_ativo": row['principio_ativo'], "apresentacao": row['apresentacao']}
