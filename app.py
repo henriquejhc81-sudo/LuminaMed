@@ -39,11 +39,9 @@ def carregar_banco_principal():
     nome_arquivo = "medicamentos.csv" 
     if not os.path.exists(nome_arquivo): return pd.DataFrame()
     
-    # Tentativa 1: Lê com ponto e vírgula, se achar linha com erro, ele PULA a linha e continua.
     try:
         df_bruto = pd.read_csv(nome_arquivo, delimiter=';', on_bad_lines='skip', encoding='utf-8')
     except:
-        # Tentativa 2: Tenta com vírgula padrão
         try:
             df_bruto = pd.read_csv(nome_arquivo, on_bad_lines='skip', encoding='latin1')
         except:
@@ -76,7 +74,6 @@ def carregar_planilha_atc():
     caminho_arquivo = "lista_remedios_estruturada.csv"
     if not os.path.exists(caminho_arquivo): return pd.DataFrame()
     
-    # O Pulo do Gato para o seu erro ParserError
     try:
         df_atc = pd.read_csv(caminho_arquivo, delimiter=',', on_bad_lines='skip')
     except:
@@ -113,7 +110,6 @@ def buscar_treatment_seguro(sintomas_lista, idade, peso, lista_bloqueio_alergia)
         
     for index, row in df_medicamentos.iterrows():
         principio_atual = str(row['principio_ativo']).upper()
-        # Se for alérgico, pula.
         if any(bloqueado in principio_atual for bloqueado in lista_bloqueio_alergia): continue
 
         sintomas_bula = str(row['sintomas_indicados']).lower()
