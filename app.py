@@ -1,14 +1,20 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import os
 
-# Tenta conectar com a IA
+# ==========================================
+# CONEXÃO COM O MOTOR DE IA EXTERNO
+# ==========================================
 try:
     from robo_ia import listar_opcoes_tratamento, gerar_prontuario_final
     CONEXAO_IA = True
 except ImportError:
     CONEXAO_IA = False
 
+# ==========================================
+# CONFIGURAÇÃO VISUAL DA INTERFACE
+# ==========================================
 st.set_page_config(page_title="Lumina Med - CDSS Advanced", page_icon="⚕️", layout="wide")
 
 st.markdown("""
@@ -32,51 +38,43 @@ chaves_api = {
 }
 
 # ==========================================
-# MOTOR RESILIENTE DE LEITURA (Passa por cima de erros)
+# 1. MOTOR RESILIENTE DE LEITURA E ADAPTAÇÃO
 # ==========================================
 @st.cache_data
 def carregar_e_adaptar_dados():
-    # Agora buscamos pelo padrão limpo
     nome_arquivo = "lista_medicamentos.csv"
     
-    # Se o arquivo não existir, o sistema avisa de forma elegante
     if not os.path.exists(nome_arquivo):
-        st.error(f"⚠️ Arquivo '{nome_arquivo}' não encontrado. Verifique se o nome está em letras minúsculas!")
+        st.error(f"⚠️ Arquivo '{nome_arquivo}' não encontrado. Verifique se o nome está em letras minúsculas no GitHub!")
         return pd.DataFrame()
 
     try:
-        # Lê o arquivo. Usamos header=0 pois agora ele está limpo
         df_bruto = pd.read_csv(nome_arquivo)
-        st.info("📦 Banco de dados carregado com sucesso.")
     except Exception as e:
         st.error(f"⚠️ Erro ao processar o arquivo: {e}")
         return pd.DataFrame()
 
-    # Mapeamento fixo, já que o arquivo está padronizado
     df_adaptado = pd.DataFrame()
-    df_adaptado['nome'] = df_bruto['PRODUTO']
-    df_adaptado['principio_ativo'] = df_bruto['SUBSTÂNCIA']
-    df_adaptado['apresentacao'] = df_bruto['APRESENTAÇÃO']
-    df_adaptado['classe_terapeutica'] = df_bruto['CLASSE TERAPÊUTICA']
     
-    # Restante da lógica...
+    # Extração segura das colunas (Mapeamento flexível)
+    df_adaptado['nome'] = df_bruto.get('PRODUTO', df_bruto.get('SUBSTÂNCIA', ''))
+    df_adaptado['principio_ativo'] = df_bruto.get('SUBSTÂNCIA', '')
+    df_adaptado['apresentacao'] = df_bruto.get('APRESENTAÇÃO', 'Não informada')
+    df_adaptado['classe_terapeutica'] = df_bruto.get('CLASSE TERAPÊUTICA', 'Geral')
+    
+    # Motor de Busca (NLP) focado na classe terapêutica
     df_adaptado['sintomas_indicados'] = df_adaptado['classe_terapeutica'].astype(str).str.lower()
     df_adaptado['alerta_alergia'] = df_adaptado['principio_ativo']
-    # ... (restante do código)
-    return df_adaptado
-
-    df_adaptado['nome'] = df_bruto[col_prod] if col_prod else df_bruto[col_subst]
-    df_adaptado['principio_ativo'] = df_bruto[col_subst]
-    df_adaptado['apresentacao'] = df_bruto[col_apres] if col_apres else "Não informada"
-    df_adaptado['classe_terapeutica'] = df_bruto[col_class] if col_class else "Geral"
-    df_adaptado['sintomas_indicados'] = df_adaptado['classe_terapeutica'].astype(str).str.lower()
     
+    # Blindagem Matemática: Preparando estrutura para cálculos de dosagem
     df_adaptado['idade_minima_meses'] = 0
     df_adaptado['dose_mg_kg_dia'] = 0.0
     df_adaptado['dose_maxima_diaria_mg'] = 0.0
     df_adaptado['frequencia_horas'] = 8
     df_adaptado['dose_padrao_adulto_mg'] = 0.0
 
+    # Limpeza de dados vazios
+    df_adaptado['nome'].replace('', np.nan, inplace=True)
     return df_adaptado.dropna(subset=['nome'])
 
 @st.cache_data
@@ -93,6 +91,9 @@ def carregar_planilha_atc():
             return pd.DataFrame()
     return df_atc
 
+# ==========================================
+# 2. MOTOR CLÍNICO E SEGURANÇA
+# ==========================================
 def auditar_alergia_cruzada(alergia_paciente, df_atc):
     if not alergia_paciente or df_atc.empty: return [], []
     alvo = df_atc[df_atc['Princípio Ativo'].astype(str).str.contains(alergia_paciente.upper().strip(), na=False)]
@@ -103,12 +104,10 @@ def auditar_alergia_cruzada(alergia_paciente, df_atc):
     bloqueados = df_atc[df_atc['Código ATC'].isin(codigos_atc)]['Princípio Ativo'].astype(str).tolist()
     return familias, [b.upper() for b in bloqueados]
 
-df_medicamentos = carregar_banco_principal()
+# ATUALIZADO: Usando o nome correto da função
+df_medicamentos = carregar_e_adaptar_dados()
 df_atc = carregar_planilha_atc()
 
-# ==========================================
-# MOTOR CLÍNICO
-# ==========================================
 def processar_sintomas(texto_sintomas):
     texto = texto_sintomas.lower().replace(',', ' ').replace('.', ' ')
     for palavra in [' e ', ' com ', ' muita ', ' muito ', ' de ', ' dor ']: texto = texto.replace(palavra, ' ')
@@ -142,7 +141,7 @@ def buscar_treatment_seguro(sintomas_lista, idade, peso, lista_bloqueio_alergia)
     return resultados
 
 # ==========================================
-# INTERFACE E GESTÃO DE ESTADO
+# 3. INTERFACE E GESTÃO DE ESTADO
 # ==========================================
 def limpar_consulta():
     for key in list(st.session_state.keys()): del st.session_state[key]
