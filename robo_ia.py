@@ -18,8 +18,7 @@ def consultar_llm_direto(provedor, prompt, chave):
         res = requests.post(url, json=payload, headers=headers, timeout=12)
         if res.status_code == 200:
             return res.json()['choices'][0]['message']['content']
-    except Exception as e:
-        print(f"Erro no provedor {provedor}: {e}")
+    except:
         pass
     return None
 
@@ -36,54 +35,8 @@ def listar_opcoes_tratamento(sintomas, alergias, uso_continuo, chaves_api):
     Responda ESTRITAMENTE em JSON: {{"opcoes": ["Remedio1", "Remedio2", "Remedio3"]}}
     """
     
-    # Tenta Groq primeiro, se falhar tenta OpenRouter
     resposta = consultar_llm_direto("groq", prompt, chaves_api.get('groq'))
-    if not resposta: 
-        resposta = consultar_llm_direto("openrouter", prompt, chaves_api.get('openrouter'))
+    if not resposta: resposta = consultar_llm_direto("openrouter", prompt, chaves_api.get('openrouter'))
     
-    if not resposta:
-        return ["Falha na conexão com a Inteligência Artificial. Verifique as Chaves API."]
-        
     try:
-        # Limpeza inteligente: As IAs costumam mandar o JSON dentro de blocos de formatação Markdown (```json)
-        texto_limpo = resposta
-        if "```json" in texto_limpo:
-            texto_limpo = texto_limpo.split("```json")[1].split("```")[0]
-        elif "```" in texto_limpo:
-            texto_limpo = texto_limpo.split("```")[1].split("```")[0]
-            
-        dados = json.loads(texto_limpo.strip())
-        return dados.get("opcoes", ["Nenhuma opção encontrada na resposta da IA."])
-    except Exception as e:
-        return [f"Erro ao ler os dados da IA: {str(e)}"]
-
-def gerar_prontuario_final(escolha_final, dados_paciente, chaves_api):
-    """
-    Gera o resumo final do atendimento com base na escolha exata do medicamento
-    e nos dados biométricos/clínicos do paciente.
-    """
-    prompt = f"""
-    Atue como Médico Clínico e Farmacêutico. Escreva um Prontuário rápido (Resumo do Atendimento).
-    
-    DADOS DO PACIENTE:
-    {dados_paciente}
-    
-    MEDICAMENTO SELECIONADO:
-    {escolha_final}
-    
-    DIRETRIZES DO LAUDO (Markdown):
-    - Princípio Ativo e Indicação.
-    - Posologia Matemática Exata.
-    - Análise de Função Renal/Interações.
-    - Contraindicações.
-    - Gere o Link para a Bula: Crie EXATAMENTE este link markdown, substituindo NOME_DO_REMEDIO pelo princípio ativo selecionado (sem acentos e espaços substituídos por %20): 
-    [Consultar Bula Oficial na ANVISA](https://consultas.anvisa.gov.br/#/bulario/q/?nomeProduto=NOME_DO_REMEDIO)
-    
-    Seja claro, objetivo e profissional.
-    """
-    
-    resposta = consultar_llm_direto("groq", prompt, chaves_api.get('groq'))
-    if not resposta:
-        resposta = consultar_llm_direto("openrouter", prompt, chaves_api.get('openrouter'))
-        
-    return resposta if resposta else "Falha de conexão com os motores de IA ao gerar o prontuário final."
+        if "
