@@ -42,25 +42,43 @@ chaves_api = {
 # ==========================================
 @st.cache_data
 def carregar_e_adaptar_dados():
-    nome_arquivo = "lista_medicamentos.csv"
-    
-    if not os.path.exists(nome_arquivo):
-        st.error(f"⚠️ Arquivo '{nome_arquivo}' não encontrado. Verifique se o nome está em letras minúsculas no GitHub!")
+    # Verifica qual arquivo existe no repositório
+    if os.path.exists("lista_medicamentos.csv"):
+        nome_arquivo = "lista_medicamentos.csv"
+    elif os.path.exists("medicamentos.csv"):
+        nome_arquivo = "medicamentos.csv"
+    else:
+        st.error("⚠️ Nenhum arquivo de banco de dados (CSV) foi encontrado no repositório!")
         return pd.DataFrame()
 
     try:
-        df_bruto = pd.read_csv(nome_arquivo)
+        # Tenta ler com vírgula e pula linhas defeituosas para não travar o app
+        df_bruto = pd.read_csv(nome_arquivo, sep=',', on_bad_lines='skip')
+        
+        # Se leu apenas 1 coluna, é porque o separador real era ponto e vírgula
+        if len(df_bruto.columns) < 2:
+            df_bruto = pd.read_csv(nome_arquivo, sep=';', on_bad_lines='skip')
+            
     except Exception as e:
-        st.error(f"⚠️ Erro ao processar o arquivo: {e}")
-        return pd.DataFrame()
+        # Se falhar feio, tenta forçar com ponto e vírgula
+        try:
+            df_bruto = pd.read_csv(nome_arquivo, sep=';', on_bad_lines='skip')
+        except Exception as erro_fatal:
+            st.error(f"⚠️ Erro fatal ao processar o arquivo: {erro_fatal}")
+            return pd.DataFrame()
 
     df_adaptado = pd.DataFrame()
     
     # Extração segura das colunas (Mapeamento flexível)
-    df_adaptado['nome'] = df_bruto.get('PRODUTO', df_bruto.get('SUBSTÂNCIA', ''))
-    df_adaptado['principio_ativo'] = df_bruto.get('SUBSTÂNCIA', '')
+    df_adaptado['nome'] = df_bruto.get('PRODUTO', df_bruto.get('SUBSTÂNCIA', pd.Series(dtype='object')))
+    df_adaptado['principio_ativo'] = df_bruto.get('SUBSTÂNCIA', pd.Series(dtype='object'))
     df_adaptado['apresentacao'] = df_bruto.get('APRESENTAÇÃO', 'Não informada')
     df_adaptado['classe_terapeutica'] = df_bruto.get('CLASSE TERAPÊUTICA', 'Geral')
+    
+    # Se as colunas principais não existirem (ex: CSV em formato totalmente diferente)
+    if df_adaptado['nome'].isnull().all() and len(df_bruto.columns) > 1:
+        st.warning("⚠️ O formato das colunas do CSV não é o esperado ('PRODUTO', 'SUBSTÂNCIA', etc).")
+        return pd.DataFrame()
     
     # Motor de Busca (NLP) focado na classe terapêutica
     df_adaptado['sintomas_indicados'] = df_adaptado['classe_terapeutica'].astype(str).str.lower()
@@ -74,7 +92,7 @@ def carregar_e_adaptar_dados():
     df_adaptado['dose_padrao_adulto_mg'] = 0.0
 
     # Limpeza de dados vazios
-    df_adaptado['nome'].replace('', np.nan, inplace=True)
+    df_adaptado['nome'] = df_adaptado['nome'].replace('', np.nan)
     return df_adaptado.dropna(subset=['nome'])
 
 @st.cache_data
@@ -83,12 +101,11 @@ def carregar_planilha_atc():
     if not os.path.exists(caminho_arquivo): return pd.DataFrame()
     
     try:
-        df_atc = pd.read_csv(caminho_arquivo, delimiter=',', on_bad_lines='skip')
+        df_atc = pd.read_csv(caminho_arquivo, sep=',', on_bad_lines='skip')
+        if len(df_atc.columns) < 2:
+            df_atc = pd.read_csv(caminho_arquivo, sep=';', on_bad_lines='skip')
     except:
-        try:
-            df_atc = pd.read_csv(caminho_arquivo, delimiter=';', on_bad_lines='skip')
-        except:
-            return pd.DataFrame()
+        return pd.DataFrame()
     return df_atc
 
 # ==========================================
@@ -104,7 +121,6 @@ def auditar_alergia_cruzada(alergia_paciente, df_atc):
     bloqueados = df_atc[df_atc['Código ATC'].isin(codigos_atc)]['Princípio Ativo'].astype(str).tolist()
     return familias, [b.upper() for b in bloqueados]
 
-# ATUALIZADO: Usando o nome correto da função
 df_medicamentos = carregar_e_adaptar_dados()
 df_atc = carregar_planilha_atc()
 
