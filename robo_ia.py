@@ -18,8 +18,8 @@ def consultar_llm_direto(provedor, prompt, chave):
         res = requests.post(url, json=payload, headers=headers, timeout=12)
         if res.status_code == 200:
             return res.json()['choices'][0]['message']['content']
-    except:
-        pass
+    except Exception as e:
+        print(f"Erro ao consultar {provedor}: {e}")
     return None
 
 def listar_opcoes_tratamento(sintomas, alergias, uso_continuo, chaves_api):
@@ -36,9 +36,37 @@ def listar_opcoes_tratamento(sintomas, alergias, uso_continuo, chaves_api):
     """
     
     resposta = consultar_llm_direto("groq", prompt, chaves_api.get('groq'))
-    if not resposta: resposta = consultar_llm_direto("openrouter", prompt, chaves_api.get('openrouter'))
+    if not resposta: 
+        resposta = consultar_llm_direto("openrouter", prompt, chaves_api.get('openrouter'))
     
     try:
-        if "
-http://googleusercontent.com/immersive_entry_chip/0
-http://googleusercontent.com/immersive_entry_chip/1
+        # Extrai de forma segura caso a IA responda com markdown ```json
+        if "```json" in resposta:
+            resposta = resposta.split("```json")[1].split("```")[0].strip()
+        elif "```" in resposta:
+            resposta = resposta.split("```")[1].split("```")[0].strip()
+            
+        dados_json = json.loads(resposta)
+        return dados_json.get("opcoes", [])
+    except Exception:
+        return []
+
+def gerar_prontuario_final(escolha_final, dados_paciente, chaves_api):
+    prompt = f"""
+    Atue como Médico. Escreva um laudo/prontuário resumido e direto para a seguinte conduta:
+    Paciente: {dados_paciente.get('idade')} anos, Peso: {dados_paciente.get('peso')} kg.
+    Quadro Clínico: {dados_paciente.get('sintomas')}
+    Medicamento prescrito: {escolha_final}
+    Alergias relatadas: {dados_paciente.get('alergias')}
+    
+    Formate em Markdown profissional contendo:
+    1. Avaliação Resumida
+    2. Conduta/Prescrição
+    3. Recomendações de Acompanhamento
+    """
+    
+    resposta = consultar_llm_direto("groq", prompt, chaves_api.get('groq'))
+    if not resposta: 
+        resposta = consultar_llm_direto("openrouter", prompt, chaves_api.get('openrouter'))
+        
+    return resposta if resposta else "Não foi possível gerar o laudo com a IA no momento."
