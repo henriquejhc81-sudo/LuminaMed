@@ -35,25 +35,35 @@ chaves_api = {
 # MOTOR RESILIENTE DE LEITURA (Passa por cima de erros)
 # ==========================================
 @st.cache_data
-def carregar_banco_principal():
-    nome_arquivo = "medicamentos.csv" 
-    if not os.path.exists(nome_arquivo): return pd.DataFrame()
+def carregar_e_adaptar_dados():
+    # Agora buscamos pelo padrão limpo
+    nome_arquivo = "lista_medicamentos.csv"
     
+    # Se o arquivo não existir, o sistema avisa de forma elegante
+    if not os.path.exists(nome_arquivo):
+        st.error(f"⚠️ Arquivo '{nome_arquivo}' não encontrado. Verifique se o nome está em letras minúsculas!")
+        return pd.DataFrame()
+
     try:
-        df_bruto = pd.read_csv(nome_arquivo, delimiter=';', on_bad_lines='skip', encoding='utf-8')
-    except:
-        try:
-            df_bruto = pd.read_csv(nome_arquivo, on_bad_lines='skip', encoding='latin1')
-        except:
-            return pd.DataFrame()
+        # Lê o arquivo. Usamos header=0 pois agora ele está limpo
+        df_bruto = pd.read_csv(nome_arquivo)
+        st.info("📦 Banco de dados carregado com sucesso.")
+    except Exception as e:
+        st.error(f"⚠️ Erro ao processar o arquivo: {e}")
+        return pd.DataFrame()
 
+    # Mapeamento fixo, já que o arquivo está padronizado
     df_adaptado = pd.DataFrame()
-    col_subst = next((c for c in df_bruto.columns if 'SUBST' in c.upper()), None)
-    col_prod = next((c for c in df_bruto.columns if 'PROD' in c.upper()), None)
-    col_apres = next((c for c in df_bruto.columns if 'APRES' in c.upper()), None)
-    col_class = next((c for c in df_bruto.columns if 'CLASS' in c.upper()), None)
-
-    if not col_subst: return pd.DataFrame()
+    df_adaptado['nome'] = df_bruto['PRODUTO']
+    df_adaptado['principio_ativo'] = df_bruto['SUBSTÂNCIA']
+    df_adaptado['apresentacao'] = df_bruto['APRESENTAÇÃO']
+    df_adaptado['classe_terapeutica'] = df_bruto['CLASSE TERAPÊUTICA']
+    
+    # Restante da lógica...
+    df_adaptado['sintomas_indicados'] = df_adaptado['classe_terapeutica'].astype(str).str.lower()
+    df_adaptado['alerta_alergia'] = df_adaptado['principio_ativo']
+    # ... (restante do código)
+    return df_adaptado
 
     df_adaptado['nome'] = df_bruto[col_prod] if col_prod else df_bruto[col_subst]
     df_adaptado['principio_ativo'] = df_bruto[col_subst]
