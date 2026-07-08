@@ -40,10 +40,3 @@ def listar_opcoes_tratamento(sintomas, alergias, uso_continuo, chaves_api):
         if "
 http://googleusercontent.com/immersive_entry_chip/0
 http://googleusercontent.com/immersive_entry_chip/1
-
-### 🚀 O Passo a Passo de Retomada:
-1. Cole esses três arquivos no seu GitHub e não se esqueça de colocar as suas **Chaves de API** originais no topo do `app.py`.
-2. Faça o **Commit**.
-3. No painel do Streamlit, vá em "Manage app" (ou nos três pontinhos) e faça o **Clear Cache** pela última vez. 
-
-Esse é o código de ponta a ponta limpo, integrado e indestrutível. Pode testar!
