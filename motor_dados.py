@@ -6,43 +6,29 @@ import os
 def carregar_banco_medicamentos():
     """
     Data Warehouse do Lumina Med:
-    Leitor Resiliente. Tenta múltiplos encodings para evitar o erro 'utf-8'.
+    Leitor cravado no padrão Excel Brasil (Latin-1) com cabeçalhos exatos.
     """
     caminho_arquivo = 'medicamentos.csv'
     
     if not os.path.exists(caminho_arquivo):
-        return {"ERRO": {"FALHA_LEITURA": [f"Arquivo {caminho_arquivo} não encontrado."]}}
-
-    # Tenta ler o arquivo forçando diferentes codificações para ignorar erros do Excel
-    encodings = ['utf-8', 'latin1', 'iso-8859-1', 'cp1252']
-    df = None
-    
-    for enc in encodings:
-        try:
-            df = pd.read_csv(caminho_arquivo, sep=None, engine='python', encoding=enc)
-            break # Se leu com sucesso, interrompe o loop
-        except Exception:
-            continue
-            
-    if df is None or df.empty:
-        return {"ERRO": {"FALHA_LEITURA": ["Falha fatal: Não foi possível decodificar o arquivo CSV."]}}
+        return {"ERRO": {"FALHA_LEITURA": [f"Arquivo {caminho_arquivo} não encontrado na raiz do GitHub."]}}
 
     try:
+        # Força o padrão Windows (Latin-1) e ignora o UTF-8 que estava causando o erro 0xdd
+        df = pd.read_csv(caminho_arquivo, sep=None, engine='python', encoding='latin-1')
+        
         # Padroniza os nomes das colunas para maiúsculas e remove espaços ocultos
         df.columns = df.columns.str.strip().str.upper()
         
-        # Mapeia as colunas exatas da sua planilha
-        col_classe = 'CLASSE TERAPÊUTICA' if 'CLASSE TERAPÊUTICA' in df.columns else df.columns[2]
-        col_principio = 'SUBSTÂNCIA' if 'SUBSTÂNCIA' in df.columns else df.columns[0]
-        col_apres = 'APRESENTAÇÃO' if 'APRESENTAÇÃO' in df.columns else df.columns[1]
-
-        # Estrutura relacional do dicionário
         banco_completo = {}
         
         for _, row in df.iterrows():
-            classe = str(row.get(col_classe, 'OUTROS')).strip().upper()
-            principio = str(row.get(col_principio, 'DESCONHECIDO')).strip().upper()
-            apresentacao = str(row.get(col_apres, 'PADRÃO')).strip()
+            # Mapeamento EXATO das colunas que você confirmou no cabeçalho
+            principio = str(row.get('SUBSTÂNCIA', 'DESCONHECIDO')).strip().upper()
+            classe = str(row.get('CLASSE TERAPÊUTICA', 'OUTROS')).strip().upper()
+            
+            # Se a coluna de apresentação tiver outro nome, ele usa 'PADRÃO'
+            apresentacao = str(row.get('APRESENTAÇÃO', 'PADRÃO')).strip()
             
             if classe == 'NAN' or principio == 'NAN':
                 continue
@@ -57,8 +43,9 @@ def carregar_banco_medicamentos():
                 banco_completo[classe][principio].append(apresentacao)
                 
         return banco_completo
+        
     except Exception as e:
-        return {"ERRO": {"FALHA_LEITURA": [str(e)]}}
+        return {"ERRO": {"FALHA_LEITURA": [f"Erro interno de leitura: {str(e)}"]}}
 
 def buscar_apresentacoes(principio_alvo, banco):
     """Busca as miligramagens exatas de um remédio no banco de dados"""
