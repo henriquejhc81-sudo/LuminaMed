@@ -4,9 +4,7 @@ import os
 
 @st.cache_data
 def carregar_banco_medicamentos():
-    """
-    Motor de Força Bruta: Imune a erros do Excel (latin-1, utf-8) e separadores.
-    """
+    """Motor de Força Bruta: Imune a erros do Excel e separadores."""
     caminho_arquivo = 'medicamentos.csv'
     
     if not os.path.exists(caminho_arquivo):
@@ -31,7 +29,6 @@ def carregar_banco_medicamentos():
         colunas = [str(c).strip().upper() for c in df.columns]
         df.columns = colunas
         
-        # Mapeamento Flexível (Procura por palavras-chave em vez de nomes exatos)
         col_principio = next((c for c in colunas if 'SUBST' in c or 'PRINC' in c), colunas[0])
         col_classe = next((c for c in colunas if 'CLASS' in c or 'TERAP' in c), colunas[1] if len(colunas) > 1 else None)
         col_apres = next((c for c in colunas if 'APRES' in c or 'DOSAG' in c), None)
@@ -50,10 +47,10 @@ def carregar_banco_medicamentos():
                 
         return banco_completo
     except Exception as e:
-        return {"ERRO": {"FALHA_LEITURA": [f"Erro interno de colunas: {str(e)}"]}}
+        return {"ERRO": {"FALHA_LEITURA": [f"Erro interno: {str(e)}"]}}
 
 def buscar_apresentacoes(principio_alvo, banco):
-    """Cruza as recomendações da IA com o seu estoque físico real"""
+    """Busca os medicamentos exatos da planilha"""
     if "ERRO" in banco: return []
     principio_alvo = str(principio_alvo).strip().upper()
     resultados = []
