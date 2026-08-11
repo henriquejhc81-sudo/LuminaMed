@@ -2,63 +2,60 @@ import pandas as pd
 import streamlit as st
 import os
 
-@st.cache_data
+@st.cache_data(ttl=3600) # Cache otimizado para a versão >=1.30.0
 def carregar_banco_medicamentos():
-    """Motor de Força Bruta: Imune a erros do Excel e separadores."""
     caminho_arquivo = 'medicamentos.csv'
     
     if not os.path.exists(caminho_arquivo):
-        return {"ERRO": {"FALHA_LEITURA": [f"Arquivo {caminho_arquivo} não encontrado na raiz."]}}
-
-    df = None
-    for enc in ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1']:
-        for sep in [';', ',', '\t']:
-            try:
-                temp_df = pd.read_csv(caminho_arquivo, sep=sep, encoding=enc, on_bad_lines='skip', encoding_errors='ignore')
-                if len(temp_df.columns) > 1:
-                    df = temp_df
-                    break
-            except Exception:
-                continue
-        if df is not None: break
-            
-    if df is None or df.empty:
-        return {"ERRO": {"FALHA_LEITURA": ["Falha absoluta ao decodificar a planilha CSV."]}}
-
-    try:
-        colunas = [str(c).strip().upper() for c in df.columns]
-        df.columns = colunas
+        return {"ERRO": f"Arquivo '{caminho_arquivo}' não encontrado."}
         
-        col_principio = next((c for c in colunas if 'SUBST' in c or 'PRINC' in c), colunas[0])
-        col_classe = next((c for c in colunas if 'CLASS' in c or 'TERAP' in c), colunas[1] if len(colunas) > 1 else None)
-        col_apres = next((c for c in colunas if 'APRES' in c or 'DOSAG' in c), None)
-
-        banco_completo = {}
-        for _, row in df.iterrows():
-            principio = str(row.get(col_principio, 'DESCONHECIDO')).strip().upper()
-            classe = str(row.get(col_classe, 'OUTROS')).strip().upper() if col_classe else 'OUTROS'
-            apresentacao = str(row.get(col_apres, 'PADRÃO')).strip() if col_apres else 'PADRÃO'
+    try:
+        # Forçando a leitura correta do CSV brasileiro (separador ; e latin-1 ou utf-8)
+        df = pd.read_csv(caminho_arquivo, sep=';', encoding='latin-1', on_bad_lines='skip')
+        
+        # Limpeza e Padronização Vectorizada (muito mais rápido no pandas 2.0+)
+        df.columns = df.columns.str.strip().str.upper()
+        
+        # Captura as colunas com base em partes dos nomes
+        col_subst = next((c for c in df.columns if 'SUBST' in c), None)
+        col_classe = next((c for c in df.columns if 'CLASSE' in c or 'TERAP' in c), None)
+        
+        if not col_subst or not col_classe:
+            return {"ERRO": "Colunas de Substância ou Classe Terapêutica ausentes."}
             
-            if pd.isna(row.get(col_principio)) or principio == 'NAN' or principio == '': continue
+        # Agrupamento sofisticado de dados
+        banco = {}
+        df_valido = df.dropna(subset=[col_subst]).copy()
+        
+        for _, row in df_valido.iterrows():
+            substancia = str(row[col_subst]).strip().upper()
+            classe = str(row[col_classe]).strip().upper() if pd.notna(row[col_classe]) else 'OUTROS'
+            
+            if classe not in banco:
+                banco[classe] = {}
+            if substancia not in banco[classe]:
+                banco[classe][substancia] = []
+            
+            # Adiciona apenas se não houver repetição de princípio exato na classe
+            if substancia not in banco[classe][substancia]:
+                banco[classe][substancia].append(substancia)
                 
-            if classe not in banco_completo: banco_completo[classe] = {}
-            if principio not in banco_completo[classe]: banco_completo[classe][principio] = []
-            if apresentacao not in banco_completo[classe][principio]: banco_completo[classe][principio].append(apresentacao)
-                
-        return banco_completo
+        return banco
+        
     except Exception as e:
-        return {"ERRO": {"FALHA_LEITURA": [f"Erro interno: {str(e)}"]}}
+        return {"ERRO": f"Falha crítica na matriz de dados: {str(e)}"}
 
 def buscar_apresentacoes(principio_alvo, banco):
-    """Busca os medicamentos exatos da planilha"""
-    if "ERRO" in banco: return []
-    principio_alvo = str(principio_alvo).strip().upper()
-    resultados = []
+    if "ERRO" in banco: 
+        return []
     
-    for classe, principios in banco.items():
-        for principio, apresentacoes in principios.items():
+    principio_alvo = str(principio_alvo).strip().upper()
+    resultados = set() # Usando Set para evitar O(N^2) no processamento
+    
+    for _, principios in banco.items():
+        for principio in principios.keys():
+            # Match parcial seguro
             if principio_alvo in principio or principio in principio_alvo:
-                for ap in apresentacoes:
-                    nome_completo = f"{principio} ({ap})"
-                    if nome_completo not in resultados: resultados.append(nome_completo)
-    return resultados
+                resultados.add(principio)
+                
+    return list(resultados)
