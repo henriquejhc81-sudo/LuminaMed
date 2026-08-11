@@ -2,60 +2,79 @@ import pandas as pd
 import streamlit as st
 import os
 
-@st.cache_data(ttl=3600) # Cache otimizado para a versão >=1.30.0
+@st.cache_data(ttl=3600)
 def carregar_banco_medicamentos():
-    caminho_arquivo = 'medicamentos.csv'
+    caminho_arquivo = 'banco_medicamentos_limpo.xlsx'
     
     if not os.path.exists(caminho_arquivo):
-        return {"ERRO": f"Arquivo '{caminho_arquivo}' não encontrado."}
+        return {"ERRO": f"Arquivo '{caminho_arquivo}' não encontrado."}, None
         
     try:
-        # Forçando a leitura correta do CSV brasileiro (separador ; e latin-1 ou utf-8)
-        df = pd.read_csv(caminho_arquivo, sep=';', encoding='latin-1', on_bad_lines='skip')
+        # Lê as duas abas do banco de dados relacional
+        df_meds = pd.read_excel(caminho_arquivo, sheet_name='Medicamentos')
+        df_atc = pd.read_excel(caminho_arquivo, sheet_name='Categorias_ATC')
         
-        # Limpeza e Padronização Vectorizada (muito mais rápido no pandas 2.0+)
-        df.columns = df.columns.str.strip().str.upper()
+        # Junta (Merge) as informações usando o ID_ATC (Chave Estrangeira)
+        df_completo = pd.merge(df_meds, df_atc, on='ID_ATC', how='left')
         
-        # Captura as colunas com base em partes dos nomes
-        col_subst = next((c for c in df.columns if 'SUBST' in c), None)
-        col_classe = next((c for c in df.columns if 'CLASSE' in c or 'TERAP' in c), None)
-        
-        if not col_subst or not col_classe:
-            return {"ERRO": "Colunas de Substância ou Classe Terapêutica ausentes."}
-            
-        # Agrupamento sofisticado de dados
+        # Cria um dicionário estruturado para buscas super rápidas no cache
         banco = {}
-        df_valido = df.dropna(subset=[col_subst]).copy()
-        
-        for _, row in df_valido.iterrows():
-            substancia = str(row[col_subst]).strip().upper()
-            classe = str(row[col_classe]).strip().upper() if pd.notna(row[col_classe]) else 'OUTROS'
+        for _, row in df_completo.iterrows():
+            substancia = str(row['Nome_Principio_Ativo']).strip().upper()
+            classe = str(row['Nome_Classe']).strip().upper()
+            atc = str(row['ID_ATC']).strip().upper()
             
-            if classe not in banco:
-                banco[classe] = {}
-            if substancia not in banco[classe]:
-                banco[classe][substancia] = []
+            banco[substancia] = {
+                "ATC": atc,
+                "Classe": classe,
+                "Risco": str(row.get('Risco_Alerta', 'Baixo'))
+            }
             
-            # Adiciona apenas se não houver repetição de princípio exato na classe
-            if substancia not in banco[classe][substancia]:
-                banco[classe][substancia].append(substancia)
-                
-        return banco
+        return banco, df_completo
         
     except Exception as e:
-        return {"ERRO": f"Falha crítica na matriz de dados: {str(e)}"}
+        return {"ERRO": f"Falha ao ler o Excel estruturado: {str(e)}"}, None
 
 def buscar_apresentacoes(principio_alvo, banco):
     if "ERRO" in banco: 
         return []
-    
+        
     principio_alvo = str(principio_alvo).strip().upper()
-    resultados = set() # Usando Set para evitar O(N^2) no processamento
+    resultados = set()
     
-    for _, principios in banco.items():
-        for principio in principios.keys():
-            # Match parcial seguro
-            if principio_alvo in principio or principio in principio_alvo:
-                resultados.add(principio)
-                
+    # Busca por correspondência exata ou parcial do princípio ativo
+    for substancia, dados in banco.items():
+        if principio_alvo in substancia or substancia in principio_alvo:
+            resultados.add(substancia)
+            
     return list(resultados)
+
+def auditar_alergia_cruzada(principio_sugerido, alergia_paciente, banco):
+    """
+    Aplica a Regra de Negócio: Cruza o código ATC do medicamento sugerido 
+    com o ATC da alergia declarada pelo paciente.
+    """
+    if not alergia_paciente or "ERRO" in banco:
+        return True, "Nenhum histórico de alergia cruzada detectado."
+        
+    alergia_upper = alergia_paciente.strip().upper()
+    principio_upper = principio_sugerido.strip().upper()
+    
+    # 1. Encontra o código ATC da droga que o paciente tem alergia
+    atc_alergia = None
+    for sub, dados in banco.items():
+        if alergia_upper in sub:
+            atc_alergia = dados['ATC']
+            break
+            
+    if not atc_alergia:
+        return True, "Alergia declarada não mapeada na base ATC do sistema."
+        
+    # 2. Compara com a droga sugerida pela IA
+    dados_sugerido = banco.get(principio_upper)
+    if dados_sugerido:
+        # Se as 3 primeiras letras/números do ATC baterem, eles são da mesma família (Ex: 'J01' - Antibacterianos)
+        if dados_sugerido['ATC'][:3] == atc_alergia[:3]:
+            return False, f"🚨 ALERTA VERMELHO: O medicamento sugerido pertence à mesma classe ATC ({dados_sugerido['ATC'][:3]} - {dados_sugerido['Classe']}) da alergia informada!"
+            
+    return True, "Seguro: Nenhuma alergia de mesma classe detectada."
