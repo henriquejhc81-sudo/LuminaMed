@@ -1,15 +1,10 @@
 import os
 import streamlit as st
-from dotenv import load_dotenv
 from motor_dados import carregar_banco_medicamentos, buscar_apresentacoes
 from robo_ia import listar_opcoes_tratamento, gerar_prontuario_final
 
-# Inicializa variáveis de ambiente locais (para desenvolvimento)
-load_dotenv()
-
 st.set_page_config(page_title="Lumina Med | CDSS", page_icon="⚕️", layout="centered")
 
-# Injeção de CSS Cyberpunk Minimalista
 st.markdown("""
 <style>
     div.stButton > button {
@@ -29,15 +24,12 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Gerenciador Híbrido de Segredos (Lê do Streamlit Cloud ou do .env local)
-def get_secret(key):
-    return st.secrets.get(key, os.getenv(key, ""))
-
+# Gerenciador de Segredos Direto do Streamlit Cloud
 CHAVES_API = {
-    'groq': get_secret("GROQ_API_KEY"),
-    'openrouter': get_secret("OPENROUTER_API_KEY"),
-    'openai': get_secret("OPENAI_API_KEY"),
-    'gemini': get_secret("GEMINI_API_KEY")
+    'groq': st.secrets.get("GROQ_API_KEY", ""),
+    'openrouter': st.secrets.get("OPENROUTER_API_KEY", ""),
+    'openai': st.secrets.get("OPENAI_API_KEY", ""),
+    'gemini': st.secrets.get("GEMINI_API_KEY", "")
 }
 
 st.title("⚕️ Lumina Med")
@@ -71,13 +63,15 @@ if st.session_state.etapa == 1:
         alergias = col2.text_input("Alergias:", placeholder="Ex: Penicilina")
         
         c1, c2, c3 = st.columns(3)
-        idade = c1.number_input("Idade:", min_value=0, max_value=120, value=30)
-        peso = c2.number_input("Peso (kg):", min_value=1.0, max_value=250.0, value=70.0)
-        sexo = c3.selectbox("Sexo:", ["Masculino", "Feminino", "Outro"])
+        # O pulo do gato: value=None e index=None para forçar a inicialização em branco
+        idade = c1.number_input("Idade:", min_value=0, max_value=120, value=None, placeholder="Ex: 30")
+        peso = c2.number_input("Peso (kg):", min_value=1.0, max_value=250.0, value=None, placeholder="Ex: 70.0")
+        sexo = c3.selectbox("Sexo:", ["Masculino", "Feminino", "Outro"], index=None, placeholder="Selecione")
         
         if st.form_submit_button("Processar Triagem"):
-            if not sintomas:
-                st.warning("⚠️ Descreva o quadro clínico para prosseguir.")
+            # Trava de segurança: impede o envio se houver campos vitais em branco
+            if not sintomas or idade is None or peso is None or sexo is None:
+                st.warning("⚠️ Preencha os Sintomas, Idade, Peso e Sexo para prosseguir.")
             else:
                 st.session_state.dados_paciente = {
                     "Sintomas": sintomas, "Alergias": alergias, "Uso": uso_continuo,
@@ -85,10 +79,19 @@ if st.session_state.etapa == 1:
                 }
                 
                 with st.status("🧠 Cruzando biometria com Inteligência Artificial...", expanded=True) as status:
-                    st.write("Analisando sintomas e interações...")
+                    st.write("Consultando diagnóstico e interações na IA...")
                     sugestoes_ia = listar_opcoes_tratamento(sintomas, alergias, uso_continuo, CHAVES_API)
                     
-                    st.write("Mapeando disponibilidade no estoque base...")
+                    # Checagem se a IA retornou erro ou falha nas chaves
+                    if not sugestoes_ia or "Erro" in sugestoes_ia[0] or "Falha" in sugestoes_ia[0]:
+                        status.update(label="Falha de Comunicação", state="error", expanded=False)
+                        st.error(sugestoes_ia[0] if sugestoes_ia else "Erro desconhecido na API.")
+                        st.stop()
+
+                    # Exibe o que a IA pensou antes de cruzar com o CSV
+                    st.info(f"💡 A IA sugeriu: {', '.join(sugestoes_ia)}")
+                    st.write("Buscando apresentações exatas no estoque base (CSV)...")
+                    
                     opcoes_encontradas = []
                     for principio in sugestoes_ia:
                         encontrados = buscar_apresentacoes(principio, banco_csv)
@@ -101,7 +104,7 @@ if st.session_state.etapa == 1:
                         st.rerun()
                     else:
                         status.update(label="Falha no Cruzamento", state="error", expanded=False)
-                        st.warning("A IA sugeriu princípios ativos que não estão mapeados no seu arquivo CSV de medicamentos.")
+                        st.warning("Nenhum dos medicamentos sugeridos pela IA foi encontrado na sua planilha.")
 
 # --- ETAPA 2 ---
 elif st.session_state.etapa == 2:
