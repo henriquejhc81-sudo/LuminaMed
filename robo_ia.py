@@ -1,10 +1,6 @@
 import json
+import re
 import requests
-from pydantic import BaseModel, ValidationError
-
-# Estrutura de Validação Pydantic (Sophistication UP!)
-class SugestoesTratamento(BaseModel):
-    opcoes: list[str]
 
 def consultar_llm_direto(provedor, prompt, chave):
     if not chave:
@@ -35,7 +31,10 @@ def listar_opcoes_tratamento(sintomas, alergias, uso_continuo, chaves_api):
     Quadro: "{sintomas}". Alergias: "{alergias}". Uso Contínuo: "{uso_continuo}".
     
     DIRETRIZES DE SEGURANÇA: Evite alergias cruzadas e interações medicamentosas.
-    Retorne ESTRITAMENTE um JSON válido neste formato: {{"opcoes": ["Principio1", "Principio2"]}}. Não adicione nenhum texto explicativo.
+    Liste até 8 princípios ativos genéricos para o tratamento.
+    
+    IMPORTANTE: Retorne APENAS um JSON válido no formato abaixo, sem nenhum texto introdutório ou formatação Markdown:
+    {{"opcoes": ["Principio1", "Principio2"]}}
     """
     
     resposta = consultar_llm_direto("groq", prompt, chaves_api.get('groq'))
@@ -43,16 +42,19 @@ def listar_opcoes_tratamento(sintomas, alergias, uso_continuo, chaves_api):
         resposta = consultar_llm_direto("openrouter", prompt, chaves_api.get('openrouter'))
     
     if not resposta: 
-        return ["Falha na conexão com as IAs (Verifique suas chaves)."]
+        return ["Falha na conexão com as IAs (Verifique suas chaves no Secrets)."]
         
-    # Tratamento sofisticado e extração segura
     try:
-        texto_limpo = resposta.replace("```json", "").replace("```", "").strip()
-        # Validação pesada com Pydantic
-        dados_validados = SugestoesTratamento.model_validate_json(texto_limpo)
-        return dados_validados.opcoes
-    except ValidationError:
-        return ["Erro: A IA não retornou um formato estruturado válido."]
+        # Usa Regex para capturar e extrair exatamente o bloco JSON, ignorando conversas extras
+        match = re.search(r'\{.*\}', resposta.strip(), re.DOTALL)
+        if match:
+            texto_json = match.group(0)
+            dados = json.loads(texto_json)
+            return dados.get("opcoes", ["Nenhuma opção encontrada no JSON."])
+        else:
+            return ["Erro: A IA não formatou a resposta em JSON."]
+    except json.JSONDecodeError:
+        return ["Erro: A IA gerou um formato inválido ou corrompido."]
     except Exception as e:
         return [f"Erro interno de processamento: {str(e)}"]
 
@@ -62,8 +64,8 @@ def gerar_prontuario_final(escolha_final, dados_paciente, chaves_api):
     DADOS: {dados_paciente}
     MEDICAMENTO: {escolha_final}
     
-    Inclua: Princípio Ativo, Posologia Sugerida, Análise Renal e Contraindicações.
-    Adicione o link: [Consultar Bula ANVISA](https://consultas.anvisa.gov.br/#/bulario/q/?nomeProduto={escolha_final.split()[0].replace(' ', '%20')})
+    Inclua: Princípio Ativo, Posologia Sugerida baseada no peso/idade, Análise Renal e Contraindicações.
+    Adicione o link exato: [Consultar Bula ANVISA](https://consultas.anvisa.gov.br/#/bulario/q/?nomeProduto={escolha_final.split()[0].replace(' ', '%20')})
     """
     
     resposta = consultar_llm_direto("groq", prompt, chaves_api.get('groq'))
