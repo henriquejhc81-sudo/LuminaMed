@@ -179,23 +179,34 @@ elif st.session_state.etapa == 3:
     st.markdown("### ETAPA 3: Laudo CDSS Final")
     with st.spinner("Calculando posologia exata com base no inventário da farmácia..."):
         
-        nome_puro = st.session_state.escolha_final.strip()
+        nome_bruto = st.session_state.escolha_final
+        nome_puro = nome_bruto.split(" | ")[0].strip() if " | " in nome_bruto else nome_bruto.strip()
         
         try:
-            apresentacoes_em_estoque = banco_dados[nome_puro].get('Apresentacoes', ["Apresentação genérica (Consulte o farmacêutico)"])
-            tarja_original = banco_dados[nome_puro].get('Tarja', "Tarja sob Avaliação")
-        except KeyError:
+            # Puxa os dados com tratamento de erro nativo do dicionário
+            dados_med = banco_dados.get(nome_puro, {})
+            apresentacoes_em_estoque = dados_med.get('Apresentacoes', ["Apresentação genérica ou não cadastrada no estoque."])
+            tarja_original = dados_med.get('Tarja', "Tarja sob Avaliação")
+        except Exception:
              apresentacoes_em_estoque = ["Apresentação genérica (Consulte o farmacêutico)"]
              tarja_original = "Tarja sob Avaliação"
 
+        # Converte a lista em uma string formatada para a IA ler melhor
+        lista_formatada = "\n".join([f"- {apres}" for apres in apresentacoes_em_estoque])
+
         prontuario = gerar_prontuario_final(
             nome_puro, 
-            apresentacoes_em_estoque,
+            lista_formatada,
             tarja_original,
             st.session_state.dados_paciente, 
             CHAVES_API
         )
+        
         st.success("✅ Protocolo Clínico Gerado com Sucesso.")
+        st.markdown(prontuario)
+        
+    st.markdown("---")
+    st.button("🔄 Iniciar Nova Triagem", on_click=resetar_consulta)
         st.markdown(prontuario)
         
     st.markdown("---")
