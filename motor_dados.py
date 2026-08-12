@@ -4,57 +4,25 @@ import os
 
 @st.cache_data(ttl=3600)
 def carregar_banco_medicamentos():
-    # Já apontando para a sua nova versão!
-    caminho_arquivo = 'banco_medicamentos_limpo_4.xlsx'
+    caminho_arquivo = 'banco_medicamentos_limpo.xlsx'
     
     if not os.path.exists(caminho_arquivo):
-        return {"ERRO": f"Arquivo '{caminho_arquivo}' não encontrado na raiz. Verifique o nome da planilha no GitHub."}, None
+        return {"ERRO": f"Arquivo '{caminho_arquivo}' não encontrado na raiz."}, None
         
     try:
-        # Lê a planilha, independente de quantas abas ela tenha
-        df = pd.read_excel(caminho_arquivo)
+        df_meds = pd.read_excel(caminho_arquivo, sheet_name='Medicamentos')
+        df_atc = pd.read_excel(caminho_arquivo, sheet_name='Categorias_ATC')
+        
+        df_completo = pd.merge(df_meds, df_atc, on='ID_ATC', how='left')
+        df_completo = df_completo.fillna("")
+        
         banco = {}
-        
-        # Blindagem: preenche campos vazios para não dar erro
-        df = df.fillna("")
-        
-        for _, row in df.iterrows():
-            # Busca inteligente: funciona mesmo se o nome da coluna mudar um pouco na sua nova planilha
-            substancia = str(row.get('SUBSTÂNCIA', row.get('Nome_Principio_Ativo', row.get('Princípio Ativo', '')))).strip().upper()
-            if not substancia or substancia == 'NAN': continue
-                
-            classe_full = str(row.get('CLASSE TERAPÊUTICA', row.get('Nome_Classe', row.get('Classe/Família Terapêutica', '')))).strip().upper()
-            apresentacao = str(row.get('APRESENTAÇÃO', 'Apresentação não especificada')).strip()
-            tarja = str(row.get('TARJA', 'Sem Tarja')).strip()
+        for _, row in df_completo.iterrows():
+            substancia = str(row.get('Nome_Principio_Ativo', '')).strip().upper()
+            classe = str(row.get('Nome_Classe', '')).strip().upper()
+            atc = str(row.get('ID_ATC', '')).strip().upper()
+            tarja = "🟢 MIP (Isento de Prescrição)"
             
-            # --- LIMPEZA VISUAL E ESTÉTICA DA TARJA ---
-            if tarja == "- (*)" or "SEM TARJA" in tarja.upper() or tarja == "":
-                tarja = "🟢 MIP (Isento de Prescrição)"
-            elif "VERMELHA SOB RESTRIÇÃO" in tarja.upper():
-                tarja = "🔴 Tarja Vermelha (Sob Restrição)"
-            elif "VERMELHA" in tarja.upper():
-                tarja = "🔴 Tarja Vermelha"
-            elif "PRETA" in tarja.upper():
-                tarja = "⚫ Tarja Preta"
-                
-            # --- SEPARAÇÃO DE ATC E CLASSE ---
-            atc = "N/A"
-            classe = classe_full
-            
-            # Tenta pegar a coluna ATC diretamente se ela existir na nova planilha
-            atc_direto = str(row.get('ID_ATC', row.get('Código ATC', ''))).strip().upper()
-            if atc_direto and atc_direto != "NAN" and atc_direto != "":
-                atc = atc_direto
-            elif " - " in classe_full:
-                partes = classe_full.split(" - ", 1)
-                atc = partes[0].strip()
-                classe = partes[1].strip()
-                
-            atc = atc.strip()
-            classe = classe.strip()
-            
-            # --- SUPER MAPEAMENTO DINÂMICO DE SINTOMAS ---
-            # Agora muito mais robusto para a sua nova planilha!
             sintomas = "geral"
             if 'EXPECTORANTE' in classe or 'R5C' in atc:
                 sintomas = "tosse com secreção, catarro, peito cheio, expectorante, mucolítico"
@@ -94,21 +62,16 @@ def carregar_banco_medicamentos():
                 sintomas = "tontura, vertigem, labirintite, enjoo"
             elif 'ANTIEMÉTICO' in classe or 'A4A' in atc or 'A4' in atc:
                 sintomas = "enjoo, náusea, vômito"
-                
-            if substancia not in banco:
-                banco[substancia] = {
-                    "ATC": atc,
-                    "Classe": classe,
-                    "Sintomas_Chave": sintomas,
-                    "Tarja": tarja,
-                    "Apresentacoes": []
-                }
-                
-            # Popula as apresentações físicas para cálculo na IA
-            if apresentacao not in banco[substancia]["Apresentacoes"]:
-                banco[substancia]["Apresentacoes"].append(apresentacao)
-                
-        return banco, df
+            
+            banco[substancia] = {
+                "ATC": atc,
+                "Classe": classe,
+                "Sintomas_Chave": sintomas,
+                "Tarja": tarja,
+                "Apresentacoes": ["Apresentação genérica"]
+            }
+            
+        return banco, df_completo
         
     except Exception as e:
         return {"ERRO": f"Falha ao ler o Excel estruturado: {str(e)}"}, None
@@ -121,14 +84,12 @@ def buscar_apresentacoes(principio_alvo, banco):
     resultados = set()
     
     for substancia, dados in banco.items():
-        # Match flexível para buscas como "Amoxicilina"
         if principio_alvo in substancia or substancia in principio_alvo:
             resultados.add(f"{substancia} | {dados['Tarja']}")
             
     return list(resultados)
 
 def auditar_alergia_cruzada(principio_sugerido, alergia_paciente, banco):
-    """Retorna: is_seguro, msg_alerta, prefixo_atc, classe, sintomas_chave"""
     if not alergia_paciente or "ERRO" in banco:
         return True, "", None, None, None
         
@@ -146,11 +107,9 @@ def auditar_alergia_cruzada(principio_sugerido, alergia_paciente, banco):
         return True, "", None, None, None
         
     for alergia in alergias_lista:
-        # 1. Bloqueio Direto (Nome igual ou parecido)
         if alergia in principio_upper:
             return False, f"🚨 BLOQUEIO DIRETO: '{principio_sugerido}' contém o agente alérgico '{alergia}'!", dados_sugerido['ATC'][:3], dados_sugerido['Classe'], dados_sugerido['Sintomas_Chave']
             
-        # 2. Bloqueio por Família ATC Cruzada
         atc_alergia = None
         for sub, dados in banco.items():
             if alergia in sub:
