@@ -10,23 +10,44 @@ def carregar_banco_medicamentos():
         return {"ERRO": f"Arquivo '{caminho_arquivo}' não encontrado."}, None
         
     try:
-        # Lê as duas abas do banco de dados relacional
         df_meds = pd.read_excel(caminho_arquivo, sheet_name='Medicamentos')
         df_atc = pd.read_excel(caminho_arquivo, sheet_name='Categorias_ATC')
         
-        # Junta (Merge) as informações usando o ID_ATC (Chave Estrangeira)
         df_completo = pd.merge(df_meds, df_atc, on='ID_ATC', how='left')
         
-        # Cria um dicionário estruturado para buscas super rápidas no cache
         banco = {}
         for _, row in df_completo.iterrows():
             substancia = str(row['Nome_Principio_Ativo']).strip().upper()
             classe = str(row['Nome_Classe']).strip().upper()
             atc = str(row['ID_ATC']).strip().upper()
             
+            # --- INJEÇÃO DINÂMICA DE SINTOMAS (Mapeamento Inteligente) ---
+            sintomas = "geral"
+            if 'EXPECTORANTE' in classe or 'R5C' in atc:
+                sintomas = "tosse com secreção, catarro, peito cheio, expectorante, mucolítico"
+            elif 'ANTITUSSÍGENO' in classe or 'R5D' in atc:
+                sintomas = "tosse seca, tosse alérgica, tosse irritativa"
+            elif 'ANALGÉSICO' in classe or 'N2B' in atc:
+                sintomas = "dor, febre, dor de cabeça, dor no corpo, dipirona, paracetamol"
+            elif 'ANTI-INFLAMATÓRIO' in classe or 'M1A' in atc:
+                sintomas = "dor, inflamação, inchaço, dor muscular, dor articular, garganta inflamada"
+            elif 'ANTI-HISTAMÍNICO' in classe or 'R6A' in atc:
+                sintomas = "alergia, rinite, coriza, espirros, coceira, urticária"
+            elif 'ANTIBIÓTICO' in classe or 'PENICILINA' in classe or 'J1' in atc:
+                sintomas = "infecção bacteriana, pus, febre alta persistente, bactéria, infecção grave"
+            elif 'ANTIESPASMÓDICO' in classe or 'A3' in atc:
+                sintomas = "cólica, dor abdominal, dor na barriga, espasmos"
+            elif 'ANTIÁCIDO' in classe or 'A2A' in atc or 'BOMBA DE PRÓTONS' in classe:
+                sintomas = "azia, queimação, refluxo, dor de estômago, gastrite"
+            elif 'BRONCODILATADOR' in classe or 'R3A' in atc:
+                sintomas = "falta de ar, asma, bronquite, chiado no peito"
+            elif 'CORTICOSTER' in classe or 'H2A' in atc or 'D7A' in atc:
+                sintomas = "inflamação grave, alergia grave, asma, dermatite"
+            
             banco[substancia] = {
                 "ATC": atc,
                 "Classe": classe,
+                "Sintomas_Chave": sintomas,
                 "Risco": str(row.get('Risco_Alerta', 'Baixo'))
             }
             
@@ -42,39 +63,38 @@ def buscar_apresentacoes(principio_alvo, banco):
     principio_alvo = str(principio_alvo).strip().upper()
     resultados = set()
     
-    # Busca por correspondência exata ou parcial do princípio ativo
-    for substancia, dados in banco.items():
+    for substancia in banco.keys():
         if principio_alvo in substancia or substancia in principio_alvo:
             resultados.add(substancia)
             
     return list(resultados)
 
 def auditar_alergia_cruzada(principio_sugerido, alergia_paciente, banco):
-    """
-    Aplica a Regra de Negócio: Cruza o código ATC do medicamento sugerido 
-    com o ATC da alergia declarada pelo paciente.
-    """
     if not alergia_paciente or "ERRO" in banco:
-        return True, "Nenhum histórico de alergia cruzada detectado."
+        return True, ""
         
-    alergia_upper = alergia_paciente.strip().upper()
-    principio_upper = principio_sugerido.strip().upper()
-    
-    # 1. Encontra o código ATC da droga que o paciente tem alergia
-    atc_alergia = None
-    for sub, dados in banco.items():
-        if alergia_upper in sub:
-            atc_alergia = dados['ATC']
-            break
-            
-    if not atc_alergia:
-        return True, "Alergia declarada não mapeada na base ATC do sistema."
-        
-    # 2. Compara com a droga sugerida pela IA
+    alergias_lista = [a.strip().upper() for a in alergia_paciente.split(',')]
+    principio_upper = str(principio_sugerido).strip().upper()
     dados_sugerido = banco.get(principio_upper)
-    if dados_sugerido:
-        # Se as 3 primeiras letras/números do ATC baterem, eles são da mesma família (Ex: 'J01' - Antibacterianos)
-        if dados_sugerido['ATC'][:3] == atc_alergia[:3]:
-            return False, f"🚨 ALERTA VERMELHO: O medicamento sugerido pertence à mesma classe ATC ({dados_sugerido['ATC'][:3]} - {dados_sugerido['Classe']}) da alergia informada!"
+    
+    if not dados_sugerido:
+        return True, ""
+        
+    for alergia in alergias_lista:
+        # 1. Checagem por Nome (Se contém a palavra exata)
+        if alergia in principio_upper:
+            return False, f"🚨 BLOQUEIO DIRETO: {principio_sugerido} contém o agente alérgico '{alergia}'!"
             
-    return True, "Seguro: Nenhuma alergia de mesma classe detectada."
+        # 2. Checagem Cruzada por Família ATC
+        atc_alergia = None
+        for sub, dados in banco.items():
+            if alergia in sub:
+                atc_alergia = dados['ATC']
+                break
+                
+        # Compara as 3 primeiras letras (Subgrupo Farmacológico. Ex: J1C = Penicilinas)
+        if atc_alergia and len(dados_sugerido['ATC']) >= 3 and len(atc_alergia) >= 3:
+            if dados_sugerido['ATC'][:3] == atc_alergia[:3]:
+                return False, f"🚨 BLOQUEIO CRUZADO: {principio_sugerido} pertence à mesma família ATC ({dados_sugerido['Classe']}) do item alérgico '{alergia}'!"
+            
+    return True, ""
