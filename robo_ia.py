@@ -58,24 +58,23 @@ def listar_opcoes_tratamento(sintomas, alergias, uso_continuo, chaves_api):
     except Exception as e:
         return [f"Erro na decodificação JSON da IA: {str(e)}"]
 
-def gerar_prontuario_final(substancia, apresentacoes_reais, tarja, dados_paciente, chaves_api):
+def gerar_prontuario_final(substancia, apresentacoes_reais, dados_paciente, chaves_api):
     substancia_segura = str(substancia) if substancia else "Medicamento Genérico"
     
     prompt = f"""
     Atue como Médico e Farmacêutico. Escreva um Prontuário Clínico Profissional em Markdown.
     
     DADOS DO PACIENTE: {dados_paciente}
-    MEDICAMENTO ESCOLHIDO: {substancia_segura}
-    CLASSE DE RECEITA: {tarja}
+    BASE QUÍMICA (SUBSTÂNCIA): {substancia_segura}
     
-    LISTA DE APRESENTAÇÕES FÍSICAS NO ESTOQUE DA FARMÁCIA:
+    INVENTÁRIO FÍSICO DA FARMÁCIA (MARCAS E APRESENTAÇÕES DISPONÍVEIS):
     {apresentacoes_reais}
     
     DIRETRIZES DO LAUDO:
-    1. ESCOLHA DE APRESENTAÇÃO: Analise a idade e peso do paciente e ESCOLHA UMA das apresentações exatas da lista acima (ex: suspensão oral para pediatria, comprimido para adulto).
-    2. POSOLOGIA MATEMÁTICA: Calcule a dose (mg/ml, gotas ou unidade) baseada ESTRITAMENTE na concentração da apresentação que você escolheu. 
-    3. INCLUA: Alertas da Tarja, Análise de Interação Medicamentosa e Função Renal.
-    4. Adicione o link de validação: [Consultar Bula ANVISA](https://consultas.anvisa.gov.br/#/bulario/q/?nomeProduto={substancia_segura.split()[0].replace(' ', '%20')})
+    1. ESCOLHA DE ESTOQUE: Analise a idade e peso do paciente e escolha UMA embalagem/marca/apresentação EXATA da lista de inventário acima (Não invente dosagens que não existem na lista).
+    2. POSOLOGIA MATEMÁTICA: Calcule a dose (mg/ml, gotas ou unidade) baseada ESTRITAMENTE na concentração da caixa que você escolheu. 
+    3. INCLUA: Análise de Interação Medicamentosa, Categoria da Tarja escolhida e Função Renal.
+    4. Adicione o link de bula: [Consultar Bula ANVISA](https://consultas.anvisa.gov.br/#/bulario/q/?nomeProduto={substancia_segura.split()[0].replace(' ', '%20')})
     """
     
     resposta = consultar_llm_direto("groq", prompt, chaves_api.get('groq'))
