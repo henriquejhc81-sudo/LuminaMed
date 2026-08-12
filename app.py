@@ -56,11 +56,11 @@ def resetar_consulta():
 if st.session_state.etapa == 1:
     st.markdown("### ETAPA 1: Triagem e Biometria")
     with st.form("form_triagem"):
-        sintomas = st.text_area("Quadro Clínico OU Nome do Princípio Ativo:", placeholder="Ex: Febre alta, tosse seca... OU Amoxicilina, Dipirona...")
+        sintomas = st.text_area("Quadro Clínico OU Nome do Medicamento (Marca/Princípio):", placeholder="Ex: Febre alta OU Amoxicilina OU Tylenol...")
         
         col1, col2 = st.columns(2)
         uso_continuo = col1.text_input("Uso contínuo:", placeholder="Ex: Losartana")
-        alergias = col2.text_input("Alergias:", placeholder="Ex: Penicilina")
+        alergias = col2.text_input("Alergias:", placeholder="Ex: Penicilina ou Benzetacil")
         
         c1, c2, c3 = st.columns(3)
         idade = c1.number_input("Idade:", min_value=0, max_value=120, value=None, placeholder="Ex: 30")
@@ -103,9 +103,8 @@ if st.session_state.etapa == 1:
                             opcoes_pre_aprovadas.extend(buscar_apresentacoes(principio, banco_dados))
                     
                     st.write("Aplicando Firewall ATC de Alergias...")
-                    
                     for opcao_bruta in opcoes_pre_aprovadas:
-                        nome_limpo = str(opcao_bruta).split(" | ")[0].strip() if " | " in str(opcao_bruta) else str(opcao_bruta)
+                        nome_limpo = str(opcao_bruta).strip()
                         seguro, msg_alerta, atc_bloq, classe_bloq, sintomas_bloq = auditar_alergia_cruzada(nome_limpo, alergias, banco_dados)
                         
                         if seguro:
@@ -150,7 +149,6 @@ elif st.session_state.etapa == 2:
     
     if st.session_state.get('bloqueios_detalhados'):
         st.error("🛑 **ALERTA DE SEGURANÇA: RISCO CLÍNICO DETECTADO**")
-        
         for b in st.session_state.bloqueios_detalhados:
             st.warning(b['msg'])
             with st.expander(f"🚫 Ver TODOS os medicamentos da classe proibida ({b['classe']})"):
@@ -162,9 +160,9 @@ elif st.session_state.etapa == 2:
                     
         st.success("✅ O sistema localizou automaticamente as seguintes Alternativas Seguras (De outras famílias químicas):")
     else:
-        st.info("Apresentações ativas aprovadas e compatíveis no seu estoque:")
+        st.info("Famílias químicas ativas aprovadas e compatíveis no seu estoque:")
         
-    escolha = st.radio("Selecione a Apresentação para prescrição matemática:", st.session_state.opcoes_estoque)
+    escolha = st.radio("Selecione a Base Química para ver as Marcas Físicas e a Posologia:", st.session_state.opcoes_estoque)
     
     col_a, col_b = st.columns(2)
     if col_a.button("Gerar Prontuário Posológico"):
@@ -178,25 +176,22 @@ elif st.session_state.etapa == 2:
 # --- ETAPA 3 ---
 elif st.session_state.etapa == 3:
     st.markdown("### ETAPA 3: Laudo CDSS Final")
-    with st.spinner("Calculando posologia exata com base no inventário da farmácia..."):
+    with st.spinner("Analisando estoque de laboratórios e calculando posologia..."):
         
-        nome_bruto = st.session_state.escolha_final
-        nome_puro = nome_bruto.split(" | ")[0].strip() if " | " in nome_bruto else nome_bruto.strip()
+        nome_puro = st.session_state.escolha_final.strip()
         
         try:
             dados_med = banco_dados.get(nome_puro, {})
-            apresentacoes_em_estoque = dados_med.get('Apresentacoes', ["Apresentação genérica ou não cadastrada."])
-            tarja_original = dados_med.get('Tarja', "Tarja sob Avaliação")
+            apresentacoes_em_estoque = dados_med.get('Opcoes_Fisicas', ["Apresentação genérica ou não cadastrada no estoque."])
         except Exception:
             apresentacoes_em_estoque = ["Apresentação genérica (Consulte o farmacêutico)"]
-            tarja_original = "Tarja sob Avaliação"
 
-        lista_formatada = "\\n".join([f"- {apres}" for apres in apresentacoes_em_estoque])
+        # Formata a lista para o LLM ler claramente os nomes comerciais
+        lista_formatada = "\n".join([f"- {apres}" for apres in apresentacoes_em_estoque])
 
         prontuario = gerar_prontuario_final(
             nome_puro, 
             lista_formatada,
-            tarja_original,
             st.session_state.dados_paciente, 
             CHAVES_API
         )
