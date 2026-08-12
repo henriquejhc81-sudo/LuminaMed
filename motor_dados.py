@@ -4,44 +4,27 @@ import os
 
 @st.cache_data(ttl=3600)
 def carregar_banco_medicamentos():
-    caminho_arquivo = 'planilha_teste_sem_repeticoes.xlsx'
+    caminho_arquivo = 'banco_medicamentos_limpo.xlsx'
     
     if not os.path.exists(caminho_arquivo):
         return {"ERRO": f"Arquivo '{caminho_arquivo}' não encontrado na raiz."}, None
         
     try:
-        df = pd.read_excel(caminho_arquivo)
-        banco = {}
+        df_meds = pd.read_excel(caminho_arquivo, sheet_name='Medicamentos')
+        df_atc = pd.read_excel(caminho_arquivo, sheet_name='Categorias_ATC')
         
-        for _, row in df.iterrows():
-            substancia = str(row.get('SUBSTÂNCIA', '')).strip().upper()
-            if substancia == 'NAN' or not substancia: continue
-                
-            classe_full = str(row.get('CLASSE TERAPÊUTICA', '')).strip().upper()
-            apresentacao = str(row.get('APRESENTAÇÃO', '')).strip()
-            tarja = str(row.get('TARJA', '')).strip()
+        df_completo = pd.merge(df_meds, df_atc, on='ID_ATC', how='left')
+        
+        banco = {}
+        for _, row in df_completo.iterrows():
+            substancia = str(row['Nome_Principio_Ativo']).strip().upper()
+            classe = str(row['Nome_Classe']).strip().upper()
+            atc = str(row['ID_ATC']).strip().upper()
             
-            if tarja == "- (*)" or "SEM TARJA" in tarja.upper():
-                tarja = "🟢 MIP (Isento de Prescrição)"
-            elif "VERMELHA SOB RESTRIÇÃO" in tarja.upper():
-                tarja = "🔴 Tarja Vermelha (Sob Restrição)"
-            elif "VERMELHA" in tarja.upper():
-                tarja = "🔴 Tarja Vermelha"
-            elif "PRETA" in tarja.upper():
-                tarja = "⚫ Tarja Preta"
-                
-            if " - " in classe_full:
-                atc, classe = classe_full.split(" - ", 1)
-            else:
-                atc, classe = "N/A", classe_full
-                
-            atc = atc.strip()
-            classe = classe.strip()
-            
-            # --- INJEÇÃO DINÂMICA DE SINTOMAS ---
+            # --- INJEÇÃO DINÂMICA DE SINTOMAS (Mapeamento Inteligente) ---
             sintomas = "geral"
             if 'EXPECTORANTE' in classe or 'R5C' in atc:
-                sintomas = "tosse com secreção, catarro, peito cheio, expectorante"
+                sintomas = "tosse com secreção, catarro, peito cheio, expectorante, mucolítico"
             elif 'ANTITUSSÍGENO' in classe or 'R5D' in atc:
                 sintomas = "tosse seca, tosse alérgica, tosse irritativa"
             elif 'ANALGÉSICO' in classe or 'N2B' in atc:
@@ -51,7 +34,7 @@ def carregar_banco_medicamentos():
             elif 'ANTI-HISTAMÍNICO' in classe or 'R6A' in atc:
                 sintomas = "alergia, rinite, coriza, espirros, coceira, urticária"
             elif 'ANTIBIÓTICO' in classe or 'PENICILINA' in classe or 'J1' in atc:
-                sintomas = "infecção bacteriana, pus, febre alta persistente, bactéria"
+                sintomas = "infecção bacteriana, pus, febre alta persistente, bactéria, infecção grave"
             elif 'ANTIESPASMÓDICO' in classe or 'A3' in atc:
                 sintomas = "cólica, dor abdominal, dor na barriga, espasmos"
             elif 'ANTIÁCIDO' in classe or 'A2A' in atc or 'BOMBA DE PRÓTONS' in classe:
@@ -60,31 +43,30 @@ def carregar_banco_medicamentos():
                 sintomas = "falta de ar, asma, bronquite, chiado no peito"
             elif 'CORTICOSTER' in classe or 'H2A' in atc or 'D7A' in atc:
                 sintomas = "inflamação grave, alergia grave, asma, dermatite"
-                
-            if substancia not in banco:
-                banco[substancia] = {
-                    "ATC": atc,
-                    "Classe": classe,
-                    "Sintomas_Chave": sintomas,
-                    "Tarja": tarja,
-                    "Apresentacoes": []
-                }
-                
-            if apresentacao not in banco[substancia]["Apresentacoes"]:
-                banco[substancia]["Apresentacoes"].append(apresentacao)
-                
-        return banco, df
+            
+            banco[substancia] = {
+                "ATC": atc,
+                "Classe": classe,
+                "Sintomas_Chave": sintomas,
+                "Risco": str(row.get('Risco_Alerta', 'Baixo'))
+            }
+            
+        return banco, df_completo
         
     except Exception as e:
-        return {"ERRO": f"Falha ao ler o Excel: {str(e)}"}, None
+        return {"ERRO": f"Falha ao ler o Excel estruturado: {str(e)}"}, None
 
 def buscar_apresentacoes(principio_alvo, banco):
-    if "ERRO" in banco: return []
+    if "ERRO" in banco: 
+        return []
+        
     principio_alvo = str(principio_alvo).strip().upper()
     resultados = set()
-    for substancia, dados in banco.items():
+    
+    for substancia in banco.keys():
         if principio_alvo in substancia or substancia in principio_alvo:
-            resultados.add(f"{substancia} | {dados['Tarja']}")
+            resultados.add(substancia)
+            
     return list(resultados)
 
 def auditar_alergia_cruzada(principio_sugerido, alergia_paciente, banco):
@@ -94,22 +76,23 @@ def auditar_alergia_cruzada(principio_sugerido, alergia_paciente, banco):
         
     alergias_lista = [a.strip().upper() for a in alergia_paciente.split(',')]
     principio_upper = str(principio_sugerido).strip().upper()
+    dados_sugerido = banco.get(principio_upper)
     
-    dados_sugerido = None
-    for sub, d in banco.items():
-        if principio_upper in sub or sub in principio_upper:
-            dados_sugerido = d
-            break
-            
+    if not dados_sugerido:
+        # Tenta match parcial caso a string não seja exata
+        for sub, d in banco.items():
+            if principio_upper in sub or sub in principio_upper:
+                dados_sugerido = d
+                principio_upper = sub
+                break
+                
     if not dados_sugerido:
         return True, "", None, None, None
         
     for alergia in alergias_lista:
-        # 1. Bloqueio Direto
         if alergia in principio_upper:
             return False, f"🚨 BLOQUEIO DIRETO: '{principio_sugerido}' contém o agente alérgico '{alergia}'!", dados_sugerido['ATC'][:3], dados_sugerido['Classe'], dados_sugerido['Sintomas_Chave']
             
-        # 2. Bloqueio por Família ATC
         atc_alergia = None
         for sub, dados in banco.items():
             if alergia in sub:
@@ -140,14 +123,12 @@ def buscar_alternativas_seguras(sintomas_chave, prefixo_atc_proibido, banco):
     sintomas_lista = [s.strip() for s in sintomas_chave.split(',')]
     
     for sub, dados in banco.items():
-        # Pula imediatamente se for da mesma família proibida
         if dados['ATC'].startswith(prefixo_atc_proibido):
             continue
             
-        # Verifica se algum sintoma da classe bate com os sintomas do remédio bloqueado
         for s in sintomas_lista:
             if s in dados['Sintomas_Chave']:
-                alternativas.add(f"{sub} | {dados['Tarja']}")
+                alternativas.add(sub)
                 break
                 
-    return sorted(list(alternativas))[:15] # Limita a 15 opções para não poluir
+    return sorted(list(alternativas))[:15]
