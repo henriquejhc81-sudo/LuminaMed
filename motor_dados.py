@@ -2,29 +2,68 @@ import pandas as pd
 import streamlit as st
 import os
 
+def traduzir_nomes(texto):
+    if not texto: return ""
+    sinonimos = {
+        "BENZETACIL": "BENZILPENICILINA",
+        "BENZETACL": "BENZILPENICILINA",
+        "NOVALGINA": "DIPIRONA",
+        "NEOSALDINA": "DIPIRONA",
+        "TYLENOL": "PARACETAMOL",
+        "ROCEFIN": "CEFTRIAXONA",
+        "AMOXIL": "AMOXICILINA",
+        "BUSCOPAN": "ESCOPOLAMINA",
+        "PLASIL": "METOCLOPRAMIDA",
+        "VOLTAREN": "DICLOFENACO",
+        "CATAFLAM": "DICLOFENACO",
+        "ADVIL": "IBUPROFENO",
+        "SPIDUFEM": "IBUPROFENO",
+        "ALIVIUM": "IBUPROFENO",
+        "MOTRIN": "IBUPROFENO",
+        "ASPIRINA": "ACETILSALICÍLICO",
+        "AAS": "ACETILSALICÍLICO",
+        "RIVOTRIL": "CLONAZEPAM",
+        "LEXOTAN": "BROMAZEPAM",
+        "VALIUM": "DIAZEPAM",
+        "ROACUTAN": "ISOTRETINOÍNA",
+        "GLIFAGE": "METFORMINA",
+        "PONSTAN": "ÁCIDO MEFENÂMICO",
+        "TORSILAX": "CARISOPRODOL",
+        "DORFLEX": "CARISOPRODOL",
+        "ALLEGRA": "FEXOFENADINA",
+        "POLARAMINE": "DEXCLORFENIRAMINA"
+    }
+    texto_upper = texto.upper()
+    for marca, princ in sinonimos.items():
+        if marca in texto_upper:
+            texto_upper = texto_upper.replace(marca, princ)
+    return texto_upper
+
 @st.cache_data(ttl=3600)
 def carregar_banco_medicamentos():
-    caminho_arquivo = 'banco_medicamentos_limpo.xlsx'
+    caminho1 = 'banco_medicamentos_limpo.xlsx.xlsx'
+    caminho2 = 'banco_medicamentos_limpo.xlsx'
     
-    if not os.path.exists(caminho_arquivo):
-        return {"ERRO": f"Arquivo '{caminho_arquivo}' não encontrado na raiz."}, None
+    arquivo_alvo = caminho1 if os.path.exists(caminho1) else (caminho2 if os.path.exists(caminho2) else None)
+    
+    if not arquivo_alvo:
+        return {"ERRO": "Arquivo Excel não encontrado na raiz. Verifique o nome."}, None
         
     try:
-        df = pd.read_excel(caminho_arquivo)
-        df = df.fillna("") # Preenche vazios para não quebrar
+        df = pd.read_excel(arquivo_alvo)
+        df = df.fillna("")
         
         banco = {}
         for _, row in df.iterrows():
-            substancia = str(row.get('SUBSTÂNCIA', row.get('Nome_Principio_Ativo', ''))).strip().upper()
+            substancia = str(row.get('SUBSTÂNCIA', row.get('Nome_Principio_Ativo', row.get('Princípio Ativo', '')))).strip().upper()
             if not substancia or substancia == 'NAN': continue
                 
             produto = str(row.get('PRODUTO', '')).strip().upper()
             laboratorio = str(row.get('LABORATÓRIO', '')).strip().upper()
-            classe_full = str(row.get('CLASSE TERAPÊUTICA', '')).strip().upper()
-            apresentacao = str(row.get('APRESENTAÇÃO', 'Apresentação não informada')).strip()
+            classe_full = str(row.get('CLASSE TERAPÊUTICA', row.get('Nome_Classe', row.get('Classe/Família Terapêutica', '')))).strip().upper()
+            apresentacao = str(row.get('APRESENTAÇÃO', 'Apresentação genérica')).strip()
             tarja_bruta = str(row.get('TARJA', '')).strip()
             
-            # --- LIMPEZA VISUAL DA TARJA ---
             if tarja_bruta == "- (*)" or "SEM TARJA" in tarja_bruta.upper() or tarja_bruta == "":
                 tarja = "🟢 MIP (Isento de Prescrição)"
             elif "VERMELHA SOB RESTRIÇÃO" in tarja_bruta.upper():
@@ -34,9 +73,8 @@ def carregar_banco_medicamentos():
             elif "PRETA" in tarja_bruta.upper():
                 tarja = "⚫ Tarja Preta"
             else:
-                tarja = "⚪ Tarja Não Classificada"
+                tarja = "⚪ Tarja Sob Avaliação"
                 
-            # --- SEPARAÇÃO DE ATC E CLASSE ---
             atc = "N/A"
             classe = classe_full
             
@@ -51,7 +89,6 @@ def carregar_banco_medicamentos():
             atc = atc.strip()
             classe = classe.strip()
             
-            # --- SUPER MAPEAMENTO DINÂMICO DE SINTOMAS ---
             sintomas = "geral"
             if 'EXPECTORANTE' in classe or 'R5C' in atc: sintomas = "tosse com secreção, catarro, peito cheio, expectorante, mucolítico"
             elif 'ANTITUSSÍGENO' in classe or 'R5D' in atc: sintomas = "tosse seca, tosse alérgica, tosse irritativa"
@@ -79,21 +116,19 @@ def carregar_banco_medicamentos():
                     "Classe": classe,
                     "Sintomas_Chave": sintomas,
                     "Marcas": set(),
-                    "Opcoes_Fisicas": set()
+                    "Opcoes_Fisicas": set(),
+                    "Tarja": tarja
                 }
             
-            # Registra as marcas comerciais (Tylenol, Benzetacil, etc) associadas a essa substância
             if produto and produto != "NAN":
                 banco[substancia]["Marcas"].add(produto)
                 
-            # Monta a string rica de apresentação física para a IA ler
             nome_comercial = produto if produto and produto != "NAN" else "Genérico"
             lab_str = f" ({laboratorio})" if laboratorio and laboratorio != "NAN" else ""
             linha_fisica = f"{tarja} | {nome_comercial}{lab_str} - {apresentacao}"
             
             banco[substancia]["Opcoes_Fisicas"].add(linha_fisica)
             
-        # Converte sets para listas ordenadas antes de entregar ao Streamlit
         for sub in banco:
             banco[sub]["Marcas"] = sorted(list(banco[sub]["Marcas"]))
             banco[sub]["Opcoes_Fisicas"] = sorted(list(banco[sub]["Opcoes_Fisicas"]))
@@ -105,27 +140,26 @@ def carregar_banco_medicamentos():
 
 def buscar_apresentacoes(principio_alvo, banco):
     if "ERRO" in banco: return []
-    principio_alvo = str(principio_alvo).strip().upper()
+    principio_alvo = traduzir_nomes(str(principio_alvo)).strip()
     resultados = set()
     
     for substancia, dados in banco.items():
-        # Busca tanto pelo nome da substância quanto pelo Nome Comercial (Produto)
         if principio_alvo in substancia:
-            resultados.add(substancia)
+            resultados.add(f"{substancia} | {dados['Tarja']}")
         else:
             for marca in dados["Marcas"]:
                 if principio_alvo in marca:
-                    resultados.add(substancia) # Adiciona a base química correspondente
+                    resultados.add(f"{substancia} | {dados['Tarja']}")
                     break
     return sorted(list(resultados))
 
 def auditar_alergia_cruzada(principio_sugerido, alergia_paciente, banco):
-    """Retorna: is_seguro, msg_alerta, prefixo_atc, classe, sintomas_chave"""
     if not alergia_paciente or "ERRO" in banco:
         return True, "", None, None, None
         
+    alergia_paciente = traduzir_nomes(alergia_paciente)
     alergias_lista = [a.strip().upper() for a in alergia_paciente.split(',')]
-    principio_upper = str(principio_sugerido).strip().upper()
+    principio_upper = traduzir_nomes(str(principio_sugerido)).strip()
     
     dados_sugerido = banco.get(principio_upper)
     if not dados_sugerido:
@@ -139,16 +173,13 @@ def auditar_alergia_cruzada(principio_sugerido, alergia_paciente, banco):
         return True, "", None, None, None
         
     for alergia in alergias_lista:
-        # 1. Bloqueio Direto de Substância
         if alergia in principio_upper:
             return False, f"🚨 BLOQUEIO DIRETO: '{principio_sugerido}' contém o agente '{alergia}'!", dados_sugerido['ATC'][:3], dados_sugerido['Classe'], dados_sugerido['Sintomas_Chave']
         
-        # Bloqueio caso o paciente seja alérgico a uma MARCA exata do remédio sugerido
         for marca in dados_sugerido['Marcas']:
             if alergia in marca:
                 return False, f"🚨 BLOQUEIO DIRETO: '{principio_sugerido}' é a base química da marca alérgica '{alergia}'!", dados_sugerido['ATC'][:3], dados_sugerido['Classe'], dados_sugerido['Sintomas_Chave']
             
-        # 2. Bloqueio Cruzado ATC inteligente (Lê nomes comerciais também)
         atc_alergia = None
         for sub, dados in banco.items():
             if alergia in sub:
@@ -186,7 +217,7 @@ def buscar_alternativas_seguras(sintomas_chave, prefixo_atc_proibido, banco):
             continue
         for s in sintomas_lista:
             if s in dados['Sintomas_Chave']:
-                alternativas.add(sub)
+                alternativas.add(f"{sub} | {dados['Tarja']}")
                 break
                 
     return sorted(list(alternativas))[:15]
