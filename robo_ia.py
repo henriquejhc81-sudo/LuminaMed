@@ -58,7 +58,8 @@ def listar_opcoes_tratamento(sintomas, alergias, uso_continuo, chaves_api):
     except Exception as e:
         return [f"Erro na decodificação JSON da IA: {str(e)}"]
 
-def gerar_prontuario_final(substancia, apresentacoes_reais, dados_paciente, chaves_api):
+# AQUI ESTÁ A CORREÇÃO DA ASSINATURA DA FUNÇÃO (5 Parâmetros)
+def gerar_prontuario_final(substancia, apresentacoes_reais, tarja, dados_paciente, chaves_api):
     substancia_segura = str(substancia) if substancia else "Medicamento Genérico"
     
     prompt = f"""
@@ -66,13 +67,14 @@ def gerar_prontuario_final(substancia, apresentacoes_reais, dados_paciente, chav
     
     DADOS DO PACIENTE: {dados_paciente}
     BASE QUÍMICA (SUBSTÂNCIA): {substancia_segura}
+    CLASSE DE RECEITA: {tarja}
     
     INVENTÁRIO FÍSICO DA FARMÁCIA (MARCAS E APRESENTAÇÕES DISPONÍVEIS):
     {apresentacoes_reais}
     
     DIRETRIZES DO LAUDO:
-    1. ESCOLHA DE ESTOQUE: Analise a idade e peso do paciente e escolha UMA embalagem/marca/apresentação EXATA da lista de inventário acima (Não invente dosagens que não existem na lista).
-    2. POSOLOGIA MATEMÁTICA: Calcule a dose (mg/ml, gotas ou unidade) baseada ESTRITAMENTE na concentração da caixa que você escolheu. 
+    1. ESCOLHA DE ESTOQUE: Analise a idade e peso do paciente e escolha UMA embalagem/marca/apresentação EXATA da lista de inventário acima.
+    2. POSOLOGIA MATEMÁTICA: Calcule a dose baseada ESTRITAMENTE na concentração da caixa que você escolheu. 
     3. INCLUA: Análise de Interação Medicamentosa, Categoria da Tarja escolhida e Função Renal.
     4. Adicione o link de bula: [Consultar Bula ANVISA](https://consultas.anvisa.gov.br/#/bulario/q/?nomeProduto={substancia_segura.split()[0].replace(' ', '%20')})
     """
