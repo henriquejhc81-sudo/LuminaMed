@@ -65,18 +65,29 @@ def listar_opcoes_tratamento(sintomas, alergias, uso_continuo, chaves_api):
     except Exception as e:
         return [f"Erro interno de processamento: {str(e)}"]
 
-def gerar_prontuario_final(escolha_final, dados_paciente, chaves_api):
-    prompt = f"""
-    Atue como Médico e Farmacêutico. Escreva um Prontuário em Markdown.
-    DADOS: {dados_paciente}
-    MEDICAMENTO: {escolha_final}
+def gerar_prontuario_final(substancia, apresentacoes_reais, tarja, dados_paciente, chaves_api):
+    # Garantia contra TypeError (Variáveis nulas)
+    substancia_segura = str(substancia) if substancia else "Medicamento Genérico"
     
-    Inclua: Princípio Ativo, Posologia Sugerida baseada no peso/idade, Análise Renal e Contraindicações.
-    Adicione o link exato: [Consultar Bula ANVISA](https://consultas.anvisa.gov.br/#/bulario/q/?nomeProduto={escolha_final.split()[0].replace(' ', '%20')})
+    prompt = f"""
+    Atue como Médico e Farmacêutico. Escreva um Prontuário Clínico Profissional em Markdown.
+    
+    DADOS DO PACIENTE: {dados_paciente}
+    MEDICAMENTO ESCOLHIDO: {substancia_segura}
+    CLASSE DE RECEITA: {tarja}
+    
+    LISTA DE APRESENTAÇÕES FÍSICAS NO ESTOQUE DA FARMÁCIA:
+    {apresentacoes_reais}
+    
+    DIRETRIZES DO LAUDO:
+    1. ESCOLHA DE APRESENTAÇÃO: Analise a idade e peso do paciente e ESCOLHA UMA das apresentações exatas da lista acima (ex: suspensão oral para pediatria, comprimido para adulto).
+    2. POSOLOGIA MATEMÁTICA: Calcule a dose (mg/ml, gotas ou unidade) baseada ESTRITAMENTE na concentração da apresentação que você escolheu. 
+    3. INCLUA: Alertas da Tarja, Análise de Interação Medicamentosa e Função Renal.
+    4. Adicione o link de validação: [Consultar Bula ANVISA](https://consultas.anvisa.gov.br/#/bulario/q/?nomeProduto={substancia_segura.split()[0].replace(' ', '%20')})
     """
     
     resposta = consultar_llm_direto("groq", prompt, chaves_api.get('groq'))
     if not resposta: 
         resposta = consultar_llm_direto("openrouter", prompt, chaves_api.get('openrouter'))
         
-    return resposta if resposta else "Falha na auditoria final (IAs indisponíveis)."
+    return str(resposta) if resposta else "Falha na geração do Prontuário: Motores de IA Indisponíveis."
