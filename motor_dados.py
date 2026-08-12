@@ -10,19 +10,45 @@ def carregar_banco_medicamentos():
         return {"ERRO": f"Arquivo '{caminho_arquivo}' não encontrado na raiz."}, None
         
     try:
-        df_meds = pd.read_excel(caminho_arquivo, sheet_name='Medicamentos')
-        df_atc = pd.read_excel(caminho_arquivo, sheet_name='Categorias_ATC')
+        # Lê a planilha, independente de quantas abas ela tenha (pega a principal)
+        df = pd.read_excel(caminho_arquivo)
         
-        df_completo = pd.merge(df_meds, df_atc, on='ID_ATC', how='left')
-        df_completo = df_completo.fillna("")
+        # Blindagem: preenche campos vazios para não dar erro
+        df = df.fillna("")
         
         banco = {}
-        for _, row in df_completo.iterrows():
-            substancia = str(row.get('Nome_Principio_Ativo', '')).strip().upper()
-            classe = str(row.get('Nome_Classe', '')).strip().upper()
-            atc = str(row.get('ID_ATC', '')).strip().upper()
-            tarja = "🟢 MIP (Isento de Prescrição)"
+        for _, row in df.iterrows():
+            # Busca inteligente adaptada para a sua planilha de aba única
+            substancia = str(row.get('SUBSTÂNCIA', row.get('Nome_Principio_Ativo', ''))).strip().upper()
+            if not substancia or substancia == 'NAN': continue
+                
+            classe_full = str(row.get('CLASSE TERAPÊUTICA', '')).strip().upper()
+            apresentacao = str(row.get('APRESENTAÇÃO', 'Apresentação não especificada')).strip()
+            tarja = str(row.get('TARJA', 'Sem Tarja')).strip()
             
+            # --- LIMPEZA VISUAL E ESTÉTICA DA TARJA ---
+            if tarja == "- (*)" or "SEM TARJA" in tarja.upper() or tarja == "":
+                tarja = "🟢 MIP (Isento de Prescrição)"
+            elif "VERMELHA SOB RESTRIÇÃO" in tarja.upper():
+                tarja = "🔴 Tarja Vermelha (Sob Restrição)"
+            elif "VERMELHA" in tarja.upper():
+                tarja = "🔴 Tarja Vermelha"
+            elif "PRETA" in tarja.upper():
+                tarja = "⚫ Tarja Preta"
+                
+            # --- SEPARAÇÃO DE ATC E CLASSE ---
+            atc = "N/A"
+            classe = classe_full
+            
+            if " - " in classe_full:
+                partes = classe_full.split(" - ", 1)
+                atc = partes[0].strip()
+                classe = partes[1].strip()
+                
+            atc = atc.strip()
+            classe = classe.strip()
+            
+            # --- SUPER MAPEAMENTO DINÂMICO DE SINTOMAS ---
             sintomas = "geral"
             if 'EXPECTORANTE' in classe or 'R5C' in atc:
                 sintomas = "tosse com secreção, catarro, peito cheio, expectorante, mucolítico"
@@ -63,18 +89,23 @@ def carregar_banco_medicamentos():
             elif 'ANTIEMÉTICO' in classe or 'A4A' in atc or 'A4' in atc:
                 sintomas = "enjoo, náusea, vômito"
             
-            banco[substancia] = {
-                "ATC": atc,
-                "Classe": classe,
-                "Sintomas_Chave": sintomas,
-                "Tarja": tarja,
-                "Apresentacoes": ["Apresentação genérica"]
-            }
+            if substancia not in banco:
+                banco[substancia] = {
+                    "ATC": atc,
+                    "Classe": classe,
+                    "Sintomas_Chave": sintomas,
+                    "Tarja": tarja,
+                    "Apresentacoes": []
+                }
             
-        return banco, df_completo
+            # Popula as apresentações físicas para cálculo na IA
+            if apresentacao not in banco[substancia]["Apresentacoes"]:
+                banco[substancia]["Apresentacoes"].append(apresentacao)
+                
+        return banco, df
         
     except Exception as e:
-        return {"ERRO": f"Falha ao ler o Excel estruturado: {str(e)}"}, None
+        return {"ERRO": f"Falha ao ler o Excel: {str(e)}"}, None
 
 def buscar_apresentacoes(principio_alvo, banco):
     if "ERRO" in banco: 
@@ -90,6 +121,7 @@ def buscar_apresentacoes(principio_alvo, banco):
     return list(resultados)
 
 def auditar_alergia_cruzada(principio_sugerido, alergia_paciente, banco):
+    """Retorna: is_seguro, msg_alerta, prefixo_atc, classe, sintomas_chave"""
     if not alergia_paciente or "ERRO" in banco:
         return True, "", None, None, None
         
@@ -123,6 +155,7 @@ def auditar_alergia_cruzada(principio_sugerido, alergia_paciente, banco):
     return True, "", None, None, None
 
 def listar_proibidos_por_familia(prefixo_atc, banco):
+    """Retorna todos os medicamentos que compartilham o mesmo código ATC proibido."""
     if not prefixo_atc or "ERRO" in banco: return []
     proibidos = set()
     for sub, dados in banco.items():
@@ -131,6 +164,7 @@ def listar_proibidos_por_familia(prefixo_atc, banco):
     return sorted(list(proibidos))
 
 def buscar_alternativas_seguras(sintomas_chave, prefixo_atc_proibido, banco):
+    """Busca medicamentos que tratam os mesmos sintomas, mas de famílias ATC DIFERENTES."""
     if not sintomas_chave or sintomas_chave == 'geral' or not prefixo_atc_proibido or "ERRO" in banco:
         return []
         
