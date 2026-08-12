@@ -105,7 +105,8 @@ if st.session_state.etapa == 1:
                     st.write("Aplicando Firewall ATC de Alergias...")
                     
                     for opcao_bruta in opcoes_pre_aprovadas:
-                        seguro, msg_alerta, atc_bloq, classe_bloq, sintomas_bloq = auditar_alergia_cruzada(opcao_bruta, alergias, banco_dados)
+                        nome_limpo = str(opcao_bruta).split(" | ")[0].strip() if " | " in str(opcao_bruta) else str(opcao_bruta)
+                        seguro, msg_alerta, atc_bloq, classe_bloq, sintomas_bloq = auditar_alergia_cruzada(nome_limpo, alergias, banco_dados)
                         
                         if seguro:
                             opcoes_encontradas.append(opcao_bruta)
@@ -163,7 +164,7 @@ elif st.session_state.etapa == 2:
     else:
         st.info("Apresentações ativas aprovadas e compatíveis no seu estoque:")
         
-    escolha = st.radio("Selecione o Princípio Ativo para prescrição matemática:", st.session_state.opcoes_estoque)
+    escolha = st.radio("Selecione a Apresentação para prescrição matemática:", st.session_state.opcoes_estoque)
     
     col_a, col_b = st.columns(2)
     if col_a.button("Gerar Prontuário Posológico"):
@@ -183,16 +184,14 @@ elif st.session_state.etapa == 3:
         nome_puro = nome_bruto.split(" | ")[0].strip() if " | " in nome_bruto else nome_bruto.strip()
         
         try:
-            # Puxa os dados com tratamento de erro nativo do dicionário
             dados_med = banco_dados.get(nome_puro, {})
-            apresentacoes_em_estoque = dados_med.get('Apresentacoes', ["Apresentação genérica ou não cadastrada no estoque."])
+            apresentacoes_em_estoque = dados_med.get('Apresentacoes', ["Apresentação genérica ou não cadastrada."])
             tarja_original = dados_med.get('Tarja', "Tarja sob Avaliação")
         except Exception:
-             apresentacoes_em_estoque = ["Apresentação genérica (Consulte o farmacêutico)"]
-             tarja_original = "Tarja sob Avaliação"
+            apresentacoes_em_estoque = ["Apresentação genérica (Consulte o farmacêutico)"]
+            tarja_original = "Tarja sob Avaliação"
 
-        # Converte a lista em uma string formatada para a IA ler melhor
-        lista_formatada = "\n".join([f"- {apres}" for apres in apresentacoes_em_estoque])
+        lista_formatada = "\\n".join([f"- {apres}" for apres in apresentacoes_em_estoque])
 
         prontuario = gerar_prontuario_final(
             nome_puro, 
@@ -203,10 +202,6 @@ elif st.session_state.etapa == 3:
         )
         
         st.success("✅ Protocolo Clínico Gerado com Sucesso.")
-        st.markdown(prontuario)
-        
-    st.markdown("---")
-    st.button("🔄 Iniciar Nova Triagem", on_click=resetar_consulta)
         st.markdown(prontuario)
         
     st.markdown("---")
