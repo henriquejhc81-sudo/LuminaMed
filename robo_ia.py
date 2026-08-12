@@ -27,13 +27,21 @@ def consultar_llm_direto(provedor, prompt, chave):
 
 def listar_opcoes_tratamento(sintomas, alergias, uso_continuo, chaves_api):
     prompt = f"""
-    Atue como Farmacêutico Clínico Sênior. 
-    Quadro: "{sintomas}". Alergias: "{alergias}". Uso Contínuo: "{uso_continuo}".
+    Atue como Farmacêutico Clínico Sênior em um Sistema de Suporte à Decisão (CDSS).
     
-    DIRETRIZES DE SEGURANÇA: Evite alergias cruzadas e interações medicamentosas.
-    Liste até 8 princípios ativos genéricos para o tratamento.
+    PERFIL DO PACIENTE:
+    - Quadro Clínico: "{sintomas}"
+    - Alergias Declaradas: "{alergias}"
+    - Uso Contínuo: "{uso_continuo}"
     
-    IMPORTANTE: Retorne APENAS um JSON válido no formato abaixo, sem nenhum texto introdutório ou formatação Markdown:
+    DIRETRIZES CLÍNICAS RIGOROSAS (NÃO IGNORE):
+    1. ANTIBIÓTICOS: NUNCA sugira antibióticos (ex: Amoxicilina, Azitromicina) a menos que haja SINAIS CLAROS de infecção bacteriana (pus, febre alta prolongada). Para "tosse com secreção", "gripe" ou "resfriado", prescreva EXPECTORANTES (ex: Ambroxol, Acetilcisteína) e MUCOLÍTICOS.
+    2. ALERGIA CRUZADA: O paciente tem alergia a "{alergias}". É PROIBIDO sugerir medicamentos da mesma família farmacológica. Exemplo: se tem alergia a Iodo, não sugira compostos iodados.
+    
+    SUA TAREFA:
+    Liste até 6 princípios ativos genéricos PERFEITAMENTE adequados e seguros para o quadro.
+    
+    Retorne APENAS um JSON válido no formato abaixo, sem texto explicativo, formatação ou markdown:
     {{"opcoes": ["Principio1", "Principio2"]}}
     """
     
@@ -45,7 +53,6 @@ def listar_opcoes_tratamento(sintomas, alergias, uso_continuo, chaves_api):
         return ["Falha na conexão com as IAs (Verifique suas chaves no Secrets)."]
         
     try:
-        # Usa Regex para capturar e extrair exatamente o bloco JSON, ignorando conversas extras
         match = re.search(r'\{.*\}', resposta.strip(), re.DOTALL)
         if match:
             texto_json = match.group(0)
