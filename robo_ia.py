@@ -34,14 +34,11 @@ def listar_opcoes_tratamento(sintomas, alergias, uso_continuo, chaves_api):
     - Alergias Declaradas: "{alergias}"
     - Uso Contínuo: "{uso_continuo}"
     
-    DIRETRIZES CLÍNICAS RIGOROSAS (NÃO IGNORE):
-    1. ANTIBIÓTICOS: NUNCA sugira antibióticos (ex: Amoxicilina, Azitromicina) a menos que haja SINAIS CLAROS de infecção bacteriana (pus, febre alta prolongada). Para "tosse com secreção", "gripe" ou "resfriado", prescreva EXPECTORANTES (ex: Ambroxol, Acetilcisteína) e MUCOLÍTICOS.
-    2. ALERGIA CRUZADA: O paciente tem alergia a "{alergias}". É PROIBIDO sugerir medicamentos da mesma família farmacológica. Exemplo: se tem alergia a Iodo, não sugira compostos iodados.
+    DIRETRIZES CLÍNICAS RIGOROSAS:
+    1. ANTIBIÓTICOS: NUNCA sugira antibióticos a menos que haja SINAIS CLAROS de infecção bacteriana (pus, febre alta persistente). Para quadros comuns respiratórios, prefira EXPECTORANTES, ANTITUSSÍGENOS ou ANTI-HISTAMÍNICOS.
+    2. ALERGIA CRUZADA: Evite sugerir qualquer medicamento da mesma família de substâncias às quais o paciente é alérgico.
     
-    SUA TAREFA:
-    Liste até 6 princípios ativos genéricos PERFEITAMENTE adequados e seguros para o quadro.
-    
-    Retorne APENAS um JSON válido no formato abaixo, sem texto explicativo, formatação ou markdown:
+    Retorne APENAS um JSON válido no formato abaixo com até 6 princípios ativos. Não adicione texto ou markdown:
     {{"opcoes": ["Principio1", "Principio2"]}}
     """
     
@@ -50,23 +47,18 @@ def listar_opcoes_tratamento(sintomas, alergias, uso_continuo, chaves_api):
         resposta = consultar_llm_direto("openrouter", prompt, chaves_api.get('openrouter'))
     
     if not resposta: 
-        return ["Falha na conexão com as IAs (Verifique suas chaves no Secrets)."]
+        return ["Falha na conexão com as IAs."]
         
     try:
         match = re.search(r'\{.*\}', resposta.strip(), re.DOTALL)
         if match:
-            texto_json = match.group(0)
-            dados = json.loads(texto_json)
+            dados = json.loads(match.group(0))
             return dados.get("opcoes", ["Nenhuma opção encontrada no JSON."])
-        else:
-            return ["Erro: A IA não formatou a resposta em JSON."]
-    except json.JSONDecodeError:
-        return ["Erro: A IA gerou um formato inválido ou corrompido."]
+        return ["Erro: A IA não formatou a resposta em JSON."]
     except Exception as e:
-        return [f"Erro interno de processamento: {str(e)}"]
+        return [f"Erro na decodificação JSON da IA: {str(e)}"]
 
 def gerar_prontuario_final(substancia, apresentacoes_reais, tarja, dados_paciente, chaves_api):
-    # Garantia contra TypeError (Variáveis nulas)
     substancia_segura = str(substancia) if substancia else "Medicamento Genérico"
     
     prompt = f"""
