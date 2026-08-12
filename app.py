@@ -60,7 +60,7 @@ if st.session_state.etapa == 1:
         
         col1, col2 = st.columns(2)
         uso_continuo = col1.text_input("Uso contínuo:", placeholder="Ex: Losartana")
-        alergias = col2.text_input("Alergias:", placeholder="Ex: Penicilina ou Benzetacil")
+        alergias = col2.text_input("Alergias:", placeholder="Ex: Penicilina ou Spidufem")
         
         c1, c2, c3 = st.columns(3)
         idade = c1.number_input("Idade:", min_value=0, max_value=120, value=None, placeholder="Ex: 30")
@@ -104,7 +104,7 @@ if st.session_state.etapa == 1:
                     
                     st.write("Aplicando Firewall ATC de Alergias...")
                     for opcao_bruta in opcoes_pre_aprovadas:
-                        nome_limpo = str(opcao_bruta).strip()
+                        nome_limpo = str(opcao_bruta).split(" | ")[0].strip() if " | " in str(opcao_bruta) else str(opcao_bruta)
                         seguro, msg_alerta, atc_bloq, classe_bloq, sintomas_bloq = auditar_alergia_cruzada(nome_limpo, alergias, banco_dados)
                         
                         if seguro:
@@ -178,20 +178,24 @@ elif st.session_state.etapa == 3:
     st.markdown("### ETAPA 3: Laudo CDSS Final")
     with st.spinner("Analisando estoque de laboratórios e calculando posologia..."):
         
-        nome_puro = st.session_state.escolha_final.strip()
+        nome_bruto = st.session_state.escolha_final
+        nome_puro = nome_bruto.split(" | ")[0].strip() if " | " in nome_bruto else nome_bruto.strip()
         
         try:
             dados_med = banco_dados.get(nome_puro, {})
             apresentacoes_em_estoque = dados_med.get('Opcoes_Fisicas', ["Apresentação genérica ou não cadastrada no estoque."])
+            tarja_original = dados_med.get('Tarja', "Tarja sob Avaliação")
         except Exception:
             apresentacoes_em_estoque = ["Apresentação genérica (Consulte o farmacêutico)"]
+            tarja_original = "Tarja sob Avaliação"
 
-        # Formata a lista para o LLM ler claramente os nomes comerciais
+        # A CORREÇÃO: Passando os 5 argumentos exatos
         lista_formatada = "\n".join([f"- {apres}" for apres in apresentacoes_em_estoque])
 
         prontuario = gerar_prontuario_final(
             nome_puro, 
             lista_formatada,
+            tarja_original,
             st.session_state.dados_paciente, 
             CHAVES_API
         )
