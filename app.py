@@ -105,8 +105,7 @@ if st.session_state.etapa == 1:
                     st.write("Aplicando Firewall ATC de Alergias...")
                     
                     for opcao_bruta in opcoes_pre_aprovadas:
-                        nome_limpo = str(opcao_bruta).split(" | ")[0].strip() if " | " in str(opcao_bruta) else str(opcao_bruta)
-                        seguro, msg_alerta, atc_bloq, classe_bloq, sintomas_bloq = auditar_alergia_cruzada(nome_limpo, alergias, banco_dados)
+                        seguro, msg_alerta, atc_bloq, classe_bloq, sintomas_bloq = auditar_alergia_cruzada(opcao_bruta, alergias, banco_dados)
                         
                         if seguro:
                             opcoes_encontradas.append(opcao_bruta)
@@ -117,7 +116,6 @@ if st.session_state.etapa == 1:
                     
                     st.session_state.bloqueios_detalhados = bloqueios_temp
                     
-                    # SE TUDO FOI BLOQUEADO (EX: O caso do Tenoxicam com alergia a Meloxicam)
                     if not opcoes_encontradas and bloqueios_temp:
                         st.write("🔄 Buscando alternativas seguras de outras classes terapêuticas...")
                         alternativas_gerais = []
@@ -135,7 +133,6 @@ if st.session_state.etapa == 1:
                             st.error("🛑 Medicamentos bloqueados e não há alternativas na base para os mesmos sintomas.")
                             st.stop()
                     
-                    # SE PASSOU DIRETO (SEM ALERGIAS GRAVES)
                     elif opcoes_encontradas:
                         st.session_state.opcoes_estoque = list(set(opcoes_encontradas))
                         st.session_state.etapa = 2
@@ -150,13 +147,11 @@ if st.session_state.etapa == 1:
 elif st.session_state.etapa == 2:
     st.markdown("### ETAPA 2: Validação Farmacêutica")
     
-    # Exibe os bloqueios detalhados e as alternativas
     if st.session_state.get('bloqueios_detalhados'):
         st.error("🛑 **ALERTA DE SEGURANÇA: RISCO CLÍNICO DETECTADO**")
         
         for b in st.session_state.bloqueios_detalhados:
             st.warning(b['msg'])
-            # Expansor com TODOS os remédios da família do paciente
             with st.expander(f"🚫 Ver TODOS os medicamentos da classe proibida ({b['classe']})"):
                 proibidos = listar_proibidos_por_familia(b['atc'], banco_dados)
                 if proibidos:
@@ -168,7 +163,7 @@ elif st.session_state.etapa == 2:
     else:
         st.info("Apresentações ativas aprovadas e compatíveis no seu estoque:")
         
-    escolha = st.radio("Selecione a Apresentação para prescrição matemática:", st.session_state.opcoes_estoque)
+    escolha = st.radio("Selecione o Princípio Ativo para prescrição matemática:", st.session_state.opcoes_estoque)
     
     col_a, col_b = st.columns(2)
     if col_a.button("Gerar Prontuário Posológico"):
@@ -184,11 +179,11 @@ elif st.session_state.etapa == 3:
     st.markdown("### ETAPA 3: Laudo CDSS Final")
     with st.spinner("Calculando posologia exata com base no inventário da farmácia..."):
         
-        nome_puro = st.session_state.escolha_final.split(" | ")[0].strip()
+        nome_puro = st.session_state.escolha_final.strip()
         
         try:
-            apresentacoes_em_estoque = banco_dados[nome_puro]['Apresentacoes']
-            tarja_original = banco_dados[nome_puro]['Tarja']
+            apresentacoes_em_estoque = banco_dados[nome_puro].get('Apresentacoes', ["Apresentação genérica (Consulte o farmacêutico)"])
+            tarja_original = banco_dados[nome_puro].get('Tarja', "Tarja sob Avaliação")
         except KeyError:
              apresentacoes_em_estoque = ["Apresentação genérica (Consulte o farmacêutico)"]
              tarja_original = "Tarja sob Avaliação"
